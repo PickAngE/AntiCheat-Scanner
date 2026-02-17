@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.env
+.venv
+venv
+AntiCheat_Report_*.txt
+PushGithub.bat
