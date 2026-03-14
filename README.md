@@ -45,11 +45,11 @@ The scanner executes inspections across 16 subsystems and traces:
 
 1. Clone or download the repository.
    ```
-   git clone https://github.com/PickAngE/Anti-Cheat-Scanner.git
+   git clone https://github.com/PickAngE/AntiCheat-Scanner.git
    ```
 2. Change into the directory.
    ```
-   cd Anti-Cheat-Scanner
+   cd AntiCheat-Scanner
    ```
 3. Install Python dependencies.
    ```
