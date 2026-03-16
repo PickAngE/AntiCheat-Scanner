@@ -249,7 +249,12 @@ class TraceChecker:
                     if len(t_clean) < 4:
                         continue
                     if re.search(rf"\b{re.escape(t_clean)}\b", line_lower):
-                        entry = f"DRIVERQUERY: Active loaded driver matching {target} - {line.split(',')[0].strip('\"')} "
+                        fields = [f.strip('"') for f in line.split(',')]
+                        d_name = fields[0] if len(fields) > 0 else target
+                        d_path = fields[12] if len(fields) > 12 else ""
+                        entry = f"DRIVERQUERY: Active loaded driver matching {target} - {d_name}"
+                        if d_path:
+                            entry += f" | {d_path}"
                         if entry not in self.found:
                             self.found.append(entry)
                         break
