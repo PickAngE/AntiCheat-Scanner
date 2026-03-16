@@ -25,12 +25,12 @@ def get_ac_database() -> List[AntiCheatInfo]:
     return [
         AntiCheatInfo(
             "ACE (AnticheatExpert)",
-            services=["ACE", "ACEDRV", "ACEService", "AntiCheatExpert", "ACE-BASE", "SGuard", "sgameguard", "TPHelper", "ACEClient"],
-            processes=["ACE.exe", "ACEDRV.exe", "ACEService.exe", "AntiCheatExpert.exe", "ACE-BASE.exe", "SGuard64.exe", "SGuard32.exe", "ACELoader.exe", "TPHelper.exe", "TenSafe.exe", "TenSafe_1.exe", "TP2Helper.exe"],
-            drivers=["ACE-Base.sys", "ACEDRV.sys", "ACE.sys", "ACE-Guard.sys", "SGuard64.sys", "AntiCheatExpert.sys", "TesSafe.sys", "TenSafe.sys"],
+            services=["ACE", "ACEDRV", "ACEService", "AntiCheatExpert", "ACE-BASE", "SGuard", "sgameguard", "TPHelper", "ACEClient", "UniRTCX", "SGuardSvc"],
+            processes=["ACE.exe", "ACEDRV.exe", "ACEService.exe", "AntiCheatExpert.exe", "ACE-BASE.exe", "SGuard64.exe", "SGuard32.exe", "ACELoader.exe", "TPHelper.exe", "TenSafe.exe", "TenSafe_1.exe", "TP2Helper.exe", "UniRTCX.exe", "ACE-Service64.exe", "ACE-Service32.exe", "SGuardSvc.exe"],
+            drivers=["ACE-Base.sys", "ACEDRV.sys", "ACE.sys", "ACE-Guard.sys", "SGuard64.sys", "AntiCheatExpert.sys", "TesSafe.sys", "TenSafe.sys", "UniRTCX.sys"],
             folders=[
                 "ACE", "AntiCheatExpert", "Tencent\\ACE", "Tencent\\AntiCheatExpert",
-                "Tencent\\TPHelper", "Tencent\\TenSafe",
+                "Tencent\\TPHelper", "Tencent\\TenSafe", "UniRTCX",
                 "AppData\\Local\\ACE", "AppData\\Local\\AntiCheatExpert",
                 "ProgramData\\ACE", "ProgramData\\AntiCheatExpert",
             ],
@@ -41,11 +41,12 @@ def get_ac_database() -> List[AntiCheatInfo]:
                 ("HKEY_LOCAL_MACHINE", r"SYSTEM\CurrentControlSet\Services\ACE-BASE"),
                 ("HKEY_LOCAL_MACHINE", r"SYSTEM\CurrentControlSet\Services\SGuard"),
                 ("HKEY_LOCAL_MACHINE", r"SYSTEM\CurrentControlSet\Services\AntiCheatExpert"),
+                ("HKEY_LOCAL_MACHINE", r"SYSTEM\CurrentControlSet\Services\UniRTCX"),
                 ("HKEY_LOCAL_MACHINE", r"SOFTWARE\Tencent\ACE"),
                 ("HKEY_LOCAL_MACHINE", r"SOFTWARE\AntiCheatExpert"),
             ],
             companies=["Tencent", "AntiCheatExpert", "Tencent Technology", "Tencent Technology (Shenzhen) Company Limited"],
-            products=["ACE", "AntiCheatExpert", "Anti Cheat Expert", "Tencent Anti-Cheat", "SGuard"],
+            products=["ACE", "AntiCheatExpert", "Anti Cheat Expert", "Tencent Anti-Cheat", "SGuard", "UniRTCX"],
         ),
         AntiCheatInfo(
             "VGK (Vanguard Valorant/LoL)",
@@ -226,15 +227,15 @@ def get_ac_database() -> List[AntiCheatInfo]:
         ),
         AntiCheatInfo(
             "Genshin Impact (HoYoProtect / mhyprot)",
-            services=["mhyprot2", "mhyprot3", "HoYoProtect", "mhyprot", "GenshinImpact", "mhypbase", "HoYoKProtect"],
+            services=["mhyprot2", "mhyprot3", "HoYoProtect", "mhyprot", "GenshinImpact", "mhypbase", "HoYoKProtect", "UniRTC", "HoYoBase"],
             processes=[
                 "GenshinImpact.exe", "YuanShen.exe",
                 "Honkai Star Rail.exe", "StarRail.exe",
                 "ZenlessZoneZero.exe",
-                "HoYoProtect.exe", "mhyprot2.sys",
-                "HYPLauncher.exe", "HoYoPlay.exe",
+                "HoYoProtect.exe", "mhyprot2.sys", "mhyprot3.sys",
+                "HYPLauncher.exe", "HoYoPlay.exe", "HoYoBase.exe",
             ],
-            drivers=["mhyprot2.sys", "mhyprot3.sys", "HoYoProtect.sys", "mhyprot.sys", "mhypbase.sys", "HoYoKProtect.sys"],
+            drivers=["mhyprot2.sys", "mhyprot3.sys", "HoYoProtect.sys", "mhyprot.sys", "mhypbase.sys", "HoYoKProtect.sys", "mhyprot2_3.sys"],
             folders=[
                 "Genshin Impact", "Genshin Impact Game", "YuanShen",
                 "Honkai Star Rail", "Honkai Star Rail Game",
@@ -262,6 +263,6 @@ def get_ac_database() -> List[AntiCheatInfo]:
                 ("HKEY_CURRENT_USER", r"Software\HoYoverse"),
             ],
             companies=["miHoYo Co.,Ltd.", "COGNOSPHERE PTE. LTD.", "Cognosphere", "miHoYo", "HoYoverse"],
-            products=["Genshin Impact", "Honkai Star Rail", "Zenless Zone Zero", "HoYoPlay", "mhyprot", "HoYoProtect"],
+            products=["Genshin Impact", "Honkai Star Rail", "Zenless Zone Zero", "HoYoPlay", "mhyprot", "HoYoProtect", "HoYoBase"],
         ),
     ]
