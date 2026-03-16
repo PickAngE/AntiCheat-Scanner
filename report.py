@@ -117,17 +117,48 @@ def build_found_map(
             if _driver_matches(ac, path):
                 _init_ac(ac.name)
                 found_map[ac.name]["items"].append(f"DRIVER {path}")
+                
+                if os.path.exists(path):
+                    from utils.helpers import get_file_hash, get_file_properties, get_digital_signature
+                    technical_info.append({
+                        "ac": ac.name,
+                        "name": os.path.basename(path),
+                        "path": path,
+                        "meta": get_file_properties(path),
+                        "sha": get_file_hash(path),
+                        "sig": get_digital_signature(path)
+                    })
                 break
 
     for trace in trace_found:
+        parts = trace.split(" | ")
+        info_to_split = parts[0]
+        path_found = parts[1] if len(parts) > 1 else ""
+        
+        sub_parts = info_to_split.split(" - ")
+        indicator_val = sub_parts[-1].strip() if len(sub_parts) > 1 else info_to_split
+
         is_active_indicator = "DRIVERQUERY: Active loaded driver" in trace or "FILTER DRIVER:" in trace
+
         for ac in ac_database:
             if target_matches(trace, ac.processes + ac.services + ac.drivers):
                 _init_ac(ac.name)
                 found_map[ac.name]["items"].append(f"TRACE {trace}")
+                
                 if is_active_indicator:
                     found_map[ac.name]["is_running"] = True
-                    found_map[ac.name]["active_indicators"].append(f"Driver: {trace.split('-')[-1].strip()}")
+                    found_map[ac.name]["active_indicators"].append(f"Driver: {indicator_val}")
+                    
+                    if path_found and os.path.exists(path_found):
+                        from utils.helpers import get_file_hash, get_file_properties, get_digital_signature
+                        technical_info.append({
+                            "ac": ac.name,
+                            "name": indicator_val,
+                            "path": path_found,
+                            "meta": get_file_properties(path_found),
+                            "sha": get_file_hash(path_found),
+                            "sig": get_digital_signature(path_found)
+                        })
                 break
 
     for task in task_found:
