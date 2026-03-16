@@ -1,5 +1,14 @@
 from typing import List
 import re
+
+WINDOWS_WHITELIST = [
+    "services.exe", "svchost.exe", "lsass.exe", "wininit.exe", 
+    "winlogon.exe", "csrss.exe", "explorer.exe", "smss.exe", 
+    "spoolsv.exe", "searchindexer.exe", "runtimebroker.exe",
+    "fontdrvhost.exe", "dwm.exe", "ctfmon.exe", "taskhostw.exe",
+    "sihost.exe", "smartscreen.exe", "conhost.exe", "audiodg.exe"
+]
+
 def content_matches(text: str, targets: List[str], min_length: int = 3) -> bool:
     if not text:
         return False
@@ -14,6 +23,7 @@ def content_matches(text: str, targets: List[str], min_length: int = 3) -> bool:
         if re.search(rf"\b{re.escape(t_base)}\b", text_lower):
             return True
     return False
+
 def folder_name_matches_target(folder_name: str, targets: List[str]) -> bool:
     if not folder_name or not targets:
         return False
@@ -32,10 +42,16 @@ def folder_name_matches_target(folder_name: str, targets: List[str]) -> bool:
             if t_clean == name_lower:
                 return True
     return False
+
 def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> bool:
     if not text:
         return False
     text_lower = text.lower()
+    
+    basename = text_lower.split("\\")[-1]
+    if basename in WINDOWS_WHITELIST:
+        return False
+
     for target in targets:
         if "*" in target:
             pattern = re.escape(target).replace(r"\*", ".*")
@@ -55,6 +71,7 @@ def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> b
             if t_lower in text_lower:
                 return True
     return False
+
 def path_has_folder_segment(path_str: str, folder_signature: str) -> bool:
     if not path_str or not folder_signature:
         return False
@@ -68,6 +85,7 @@ def path_has_folder_segment(path_str: str, folder_signature: str) -> bool:
         if parts[i:i + len(sig_parts)] == sig_parts:
             return True
     return False
+
 def metadata_matches(properties: dict, target_companies: List[str], target_products: List[str]) -> bool:
     if not properties:
         return False
@@ -89,11 +107,17 @@ def metadata_matches(properties: dict, target_companies: List[str], target_produ
             if target.lower() in desc:
                 return True
     return False
+
 def fuzzy_matches(text: str, target: str, threshold: float = 0.8) -> bool:
     if not text or not target:
         return False
     t1 = text.lower().strip()
     t2 = target.lower().strip()
+    
+    basename = t1.split("\\")[-1]
+    if basename in WINDOWS_WHITELIST:
+        return False
+
     if t1 == t2:
         return True
     if len(t1) < 4 or len(t2) < 4:
