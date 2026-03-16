@@ -36,15 +36,15 @@ Forensic tool for Windows environments designed to identify the active presence 
 
 ## Installation
 1. Clone the repository:
-   ```powershell
+   ```
    git clone https://github.com/PickAngE/AntiCheat-Scanner.git
    ```
 2. Navigate to the project folder:
-   ```powershell
+   ```
    cd AntiCheat-Scanner
    ```
 3. Install dependencies:
-   ```powershell
+   ```
    pip install -r requirements.txt
    ```
 
