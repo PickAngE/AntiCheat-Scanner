@@ -88,16 +88,6 @@ def main() -> None:
         except Exception:
             pass
 
-    import shutil
-    import pathlib
-    def _cleanup_pycache():
-        try:
-            for p in pathlib.Path(__file__).parent.rglob("__pycache__"):
-                shutil.rmtree(p, ignore_errors=True)
-        except Exception:
-            pass
-
-    _cleanup_pycache()
     input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
