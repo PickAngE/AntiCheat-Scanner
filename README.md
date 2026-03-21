@@ -1,12 +1,12 @@
-# Anti-Cheat Scanner
+# AntiCheat Scanner
 
 ## Description
 Forensic tool for Windows environments designed to identify the active presence and execution traces of anti-cheat software. The script performs multi-layered analysis across User-mode, Kernel-mode, Registry, and File System.
 
 ## Detection Targets
 - ACE (AntiCheatExpert)
-- Vanguard (Riot Games)
-- Ricochet (Activision)
+- Vanguard (Riot Games) (may not work properly)
+- Ricochet (Activision) (may not work properly)
 - EA Anti-Cheat / Javelin
 - EAC (EasyAntiCheat)
 - BattlEye
