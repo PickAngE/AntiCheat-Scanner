@@ -1,12 +1,17 @@
 from typing import List
 import re
+from difflib import SequenceMatcher
 
 WINDOWS_WHITELIST = [
     "services.exe", "svchost.exe", "lsass.exe", "wininit.exe", 
     "winlogon.exe", "csrss.exe", "explorer.exe", "smss.exe", 
     "spoolsv.exe", "searchindexer.exe", "runtimebroker.exe",
     "fontdrvhost.exe", "dwm.exe", "ctfmon.exe", "taskhostw.exe",
-    "sihost.exe", "smartscreen.exe", "conhost.exe", "audiodg.exe"
+    "sihost.exe", "smartscreen.exe", "conhost.exe", "audiodg.exe",
+    "cmd.exe", "powershell.exe", "pwsh.exe", "wt.exe",
+    "vds.exe", "wmiprvse.exe", "dllhost.exe", "werfault.exe",
+    "wermgr.exe", "taskmgr.exe", "regedit.exe", "perfmon.exe",
+    "system", "registry", "net.exe", "net1.exe", "reg.exe"
 ]
 
 def content_matches(text: str, targets: List[str], min_length: int = 3) -> bool:
@@ -81,8 +86,14 @@ def path_has_folder_segment(path_str: str, folder_signature: str) -> bool:
         return False
     parts = path_norm.rstrip("\\").split("\\")
     sig_parts = sig_norm.rstrip("\\").split("\\")
-    for i in range(len(parts) - len(sig_parts) + 1):
-        if parts[i:i + len(sig_parts)] == sig_parts:
+    len_sig = len(sig_parts)
+    for i in range(len(parts) - len_sig + 1):
+        match = True
+        for j in range(len_sig):
+            if parts[i + j] != sig_parts[j]:
+                match = False
+                break
+        if match:
             return True
     return False
 
@@ -122,6 +133,5 @@ def fuzzy_matches(text: str, target: str, threshold: float = 0.8) -> bool:
         return True
     if len(t1) < 4 or len(t2) < 4:
         return t1 == t2
-    from difflib import SequenceMatcher
     ratio = SequenceMatcher(None, t1, t2).ratio()
     return ratio >= threshold
