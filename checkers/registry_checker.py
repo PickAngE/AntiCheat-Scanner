@@ -46,15 +46,18 @@ class RegistryChecker:
                             try:
                                 display_name = str(winreg.QueryValueEx(subkey, "DisplayName")[0]).lower()
                                 for ac in self.ac_database:
-                                    targets = [ac.name.lower()] + [p.lower() for p in ac.products]
-                                    for t in targets:
-                                        if len(t) < 4:
-                                            continue
-                                        if re.search(rf"\b{re.escape(t)}\b", display_name):
-                                            entry = f"REGISTRY UNINSTALL: {hive_name}\\{full_path} ({display_name})"
-                                            if entry not in self.found:
-                                                self.found.append(entry)
-                                            break
+                                    targets = []
+                                    for p in [ac.name] + ac.products:
+                                        if len(p) >= 4:
+                                            targets.append(re.escape(p.lower()))
+                                    if not targets:
+                                        continue
+                                    pattern = re.compile(rf"\b({'|'.join(targets)})\b")
+                                    if pattern.search(display_name):
+                                        entry = f"REGISTRY UNINSTALL: {hive_name}\\{full_path} ({display_name})"
+                                        if entry not in self.found:
+                                            self.found.append(entry)
+                                        break
                             except FileNotFoundError: pass
                             winreg.CloseKey(subkey)
                         except OSError: pass
@@ -102,16 +105,19 @@ class RegistryChecker:
                 try:
                     handle = winreg.OpenKey(hive, path, 0, winreg.KEY_READ)
                     num_values = winreg.QueryInfoKey(handle)[1]
+                    
+                    pattern = None
+                    if all_targets:
+                        pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
+                        
                     for i in range(num_values):
                         try:
                             val_name, val_data, _ = winreg.EnumValue(handle, i)
                             combined = f"{val_name} {val_data}".lower()
-                            for target in all_targets:
-                                if re.search(rf"\b{re.escape(target)}\b", combined):
-                                    entry = f"STARTUP: {hive_name}\\{path}\\{val_name} = {val_data}"
-                                    if entry not in self.found:
-                                        self.found.append(entry)
-                                    break
+                            if pattern and pattern.search(combined):
+                                entry = f"STARTUP: {hive_name}\\{path}\\{val_name} = {val_data}"
+                                if entry not in self.found:
+                                    self.found.append(entry)
                         except OSError:
                             continue
                     winreg.CloseKey(handle)
@@ -128,16 +134,18 @@ class RegistryChecker:
                     t = item.lower().replace(".exe", "").replace(".sys", "")
                     if len(t) >= 4:
                         all_targets.append(t)
+            pattern = None
+            if all_targets:
+                pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
+                
             for i in range(num_values):
                 try:
                     val_name, _, _ = winreg.EnumValue(handle, i)
                     val_lower = val_name.lower()
-                    for target in all_targets:
-                        if re.search(rf"\b{re.escape(target)}\b", val_lower):
-                            entry = f"MUICACHE EXECUTION: {val_name}"
-                            if entry not in self.found:
-                                self.found.append(entry)
-                            break
+                    if pattern and pattern.search(val_lower):
+                        entry = f"MUICACHE EXECUTION: {val_name}"
+                        if entry not in self.found:
+                            self.found.append(entry)
                 except OSError: pass
             winreg.CloseKey(handle)
         except (FileNotFoundError, OSError): pass
@@ -152,16 +160,18 @@ class RegistryChecker:
                     t = item.lower().replace(".exe", "").replace(".sys", "")
                     if len(t) >= 4:
                         all_targets.append(t)
+            pattern = None
+            if all_targets:
+                pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
+                
             for i in range(num_values):
                 try:
                     val_name, _, _ = winreg.EnumValue(handle, i)
                     val_lower = val_name.lower()
-                    for target in all_targets:
-                        if re.search(rf"\b{re.escape(target)}\b", val_lower):
-                            entry = f"APPCOMPAT HISTORY: {val_name}"
-                            if entry not in self.found:
-                                self.found.append(entry)
-                            break
+                    if pattern and pattern.search(val_lower):
+                        entry = f"APPCOMPAT HISTORY: {val_name}"
+                        if entry not in self.found:
+                            self.found.append(entry)
                 except OSError: pass
             winreg.CloseKey(handle)
         except (FileNotFoundError, OSError): pass
