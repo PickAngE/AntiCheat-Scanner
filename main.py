@@ -20,11 +20,14 @@ from report import build_found_map, write_report, get_total_found
 
 def main() -> None:
     try:
+        deep_scan = True
         if not is_admin():
             if request_admin_rerun():
                 sys.exit(0)
 
         logger.start_logging()
+        if deep_scan:
+            logger.log("")
         ac_database = get_ac_database()
 
         all_services = []
