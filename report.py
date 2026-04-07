@@ -41,10 +41,73 @@ def build_found_map(
 ) -> Dict[str, Any]:
     found_map: Dict[str, Dict[str, Any]] = {}
     technical_info: List[Dict[str, Any]] = []
+    
+    def _append_unique(values: List[str], item: str) -> None:
+        if item not in values:
+            values.append(item)
 
     def _init_ac(name: str):
         if name not in found_map:
-            found_map[name] = {"items": [], "is_running": False, "active_indicators": []}
+            found_map[name] = {
+                "items": [],
+                "is_running": False,
+                "active_indicators": [],
+                "active_now": [],
+                "historical_traces": [],
+                "confidence_scores": [],
+            }
+
+    def _confidence_for_item(item: str) -> int:
+        it = item.upper()
+        if it.startswith("PROCESS "):
+            return 98
+        if it.startswith("SERVICE ") and "[RUNNING]" in it:
+            return 95
+        if it.startswith("TRACE DRIVERQUERY:") or it.startswith("TRACE FILTER DRIVER:"):
+            return 92
+        if it.startswith("DRIVER "):
+            return 85
+        if it.startswith("SERVICE "):
+            return 75
+        if it.startswith("TASK/HISTORY "):
+            return 68
+        if it.startswith("REGISTRY "):
+            return 65
+        if it.startswith("FOLDER "):
+            return 60
+        if it.startswith("TRACE "):
+            return 55
+        return 50
+
+    def _is_active_item(item: str) -> bool:
+        it = item.upper()
+        if it.startswith("PROCESS "):
+            return True
+        if it.startswith("SERVICE ") and "[RUNNING]" in it:
+            return True
+        if it.startswith("TRACE DRIVERQUERY:") or it.startswith("TRACE FILTER DRIVER:"):
+            return True
+        return False
+
+    def _refresh_classification(name: str) -> None:
+        data = found_map[name]
+        active_now: List[str] = []
+        historical_traces: List[str] = []
+        confidence_scores: List[str] = []
+        for item in data["items"]:
+            score = _confidence_for_item(item)
+            confidence_scores.append(f"{score}% | {item}")
+            if _is_active_item(item):
+                active_now.append(item)
+            else:
+                historical_traces.append(item)
+        data["active_now"] = active_now
+        data["historical_traces"] = historical_traces
+        data["confidence_scores"] = sorted(
+            confidence_scores,
+            key=lambda x: int(x.split("%", 1)[0]),
+            reverse=True,
+        )
 
     for item in svc_found:
         name = str(item.get("display_name") or item.get("name") or "")
@@ -55,8 +118,8 @@ def build_found_map(
                 status_str = " [RUNNING]" if is_running else ""
                 if is_running:
                     found_map[ac.name]["is_running"] = True
-                    found_map[ac.name]["active_indicators"].append(f"Service: {name}")
-                found_map[ac.name]["items"].append(f"SERVICE {name}{status_str}")
+                    _append_unique(found_map[ac.name]["active_indicators"], f"Service: {name}")
+                _append_unique(found_map[ac.name]["items"], f"SERVICE {name}{status_str}")
                 break
 
     for item in proc_found:
@@ -69,8 +132,8 @@ def build_found_map(
         if ac_name_attr:
             _init_ac(ac_name_attr)
             found_map[ac_name_attr]["is_running"] = True
-            found_map[ac_name_attr]["active_indicators"].append(f"Process: {name}")
-            found_map[ac_name_attr]["items"].append(detail)
+            _append_unique(found_map[ac_name_attr]["active_indicators"], f"Process: {name}")
+            _append_unique(found_map[ac_name_attr]["items"], detail)
             
             technical_info.append({
                 "ac": ac_name_attr,
@@ -85,8 +148,8 @@ def build_found_map(
                 if _process_matches(ac, name):
                     _init_ac(ac.name)
                     found_map[ac.name]["is_running"] = True
-                    found_map[ac.name]["active_indicators"].append(f"Process: {name}")
-                    found_map[ac.name]["items"].append(detail)
+                    _append_unique(found_map[ac.name]["active_indicators"], f"Process: {name}")
+                    _append_unique(found_map[ac.name]["items"], detail)
                     
                     technical_info.append({
                         "ac": ac.name,
@@ -102,21 +165,21 @@ def build_found_map(
         for ac in ac_database:
             if _folder_matches(ac, path):
                 _init_ac(ac.name)
-                found_map[ac.name]["items"].append(f"FOLDER {path}")
+                _append_unique(found_map[ac.name]["items"], f"FOLDER {path}")
                 break
 
     for path in reg_found:
         for ac in ac_database:
             if _registry_matches(ac, path):
                 _init_ac(ac.name)
-                found_map[ac.name]["items"].append(f"REGISTRY {path}")
+                _append_unique(found_map[ac.name]["items"], f"REGISTRY {path}")
                 break
 
     for path in driver_found:
         for ac in ac_database:
             if _driver_matches(ac, path):
                 _init_ac(ac.name)
-                found_map[ac.name]["items"].append(f"DRIVER {path}")
+                _append_unique(found_map[ac.name]["items"], f"DRIVER {path}")
                 
                 if os.path.exists(path):
                     from utils.helpers import get_file_hash, get_file_properties, get_digital_signature
@@ -143,11 +206,11 @@ def build_found_map(
         for ac in ac_database:
             if target_matches(trace, ac.processes + ac.services + ac.drivers):
                 _init_ac(ac.name)
-                found_map[ac.name]["items"].append(f"TRACE {trace}")
+                _append_unique(found_map[ac.name]["items"], f"TRACE {trace}")
                 
                 if is_active_indicator:
                     found_map[ac.name]["is_running"] = True
-                    found_map[ac.name]["active_indicators"].append(f"Driver: {indicator_val}")
+                    _append_unique(found_map[ac.name]["active_indicators"], f"Driver: {indicator_val}")
                     
                     if path_found and os.path.exists(path_found):
                         from utils.helpers import get_file_hash, get_file_properties, get_digital_signature
@@ -165,9 +228,12 @@ def build_found_map(
         for ac in ac_database:
             if target_matches(task, ac.processes + ac.services + ac.drivers):
                 _init_ac(ac.name)
-                found_map[ac.name]["items"].append(f"TASK/HISTORY {task}")
+                _append_unique(found_map[ac.name]["items"], f"TASK/HISTORY {task}")
                 break
-                
+
+    for ac_name in list(found_map.keys()):
+        _refresh_classification(ac_name)
+
     return {"found_map": found_map, "technical_info": technical_info}
 
 def write_report(data_package: Dict[str, Any], total_found: int) -> None:
@@ -184,8 +250,26 @@ def write_report(data_package: Dict[str, Any], total_found: int) -> None:
                 running_acs.append((name, data.get("active_indicators", [])))
             
             logger.log(f"{name}{running_str}")
-            for item in data["items"]:
-                logger.log(item, indent=2)
+            logger.log("ACTIVE NOW:", indent=2)
+            if data.get("active_now"):
+                for item in data["active_now"]:
+                    logger.log(item, indent=4)
+            else:
+                logger.log("None", indent=4)
+
+            logger.log("HISTORICAL TRACES:", indent=2)
+            if data.get("historical_traces"):
+                for item in data["historical_traces"]:
+                    logger.log(item, indent=4)
+            else:
+                logger.log("None", indent=4)
+
+            logger.log("CONFIDENCE SCORES:", indent=2)
+            if data.get("confidence_scores"):
+                for score_line in data["confidence_scores"]:
+                    logger.log(score_line, indent=4)
+            else:
+                logger.log("None", indent=4)
             logger.log("")
 
     if running_acs:
