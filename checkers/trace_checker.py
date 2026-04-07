@@ -1,5 +1,6 @@
 import os
 import re
+import csv
 import subprocess
 from typing import List
 from .matchers import target_matches, content_matches
@@ -240,18 +241,19 @@ class TraceChecker:
             output = subprocess.check_output(
                 ["driverquery", "/v", "/fo", "csv"], text=True, errors="ignore", timeout=30
             )
-            lines = output.splitlines()
-            if not lines: return
-            for line in lines[1:]:
+            rows = list(csv.reader(output.splitlines()))
+            if len(rows) <= 1:
+                return
+            for row in rows[1:]:
+                line = ",".join(row)
                 line_lower = line.lower()
                 for target in self.target_names:
                     t_clean = self._clean_target(target)
                     if len(t_clean) < 4:
                         continue
                     if re.search(rf"\b{re.escape(t_clean)}\b", line_lower):
-                        fields = [f.strip('"') for f in line.split(',')]
-                        d_name = fields[0] if len(fields) > 0 else target
-                        d_path = fields[12] if len(fields) > 12 else ""
+                        d_name = row[0].strip() if len(row) > 0 else target
+                        d_path = row[12].strip() if len(row) > 12 else ""
                         entry = f"DRIVERQUERY: Active loaded driver matching {target} - {d_name}"
                         if d_path:
                             entry += f" | {d_path}"
