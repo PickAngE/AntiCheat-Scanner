@@ -52,6 +52,7 @@ def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> b
     if not text:
         return False
     text_lower = text.lower()
+    text_norm = re.sub(r"[^a-z0-9]+", " ", text_lower)
     
     basename = text_lower.split("\\")[-1]
     if basename in WINDOWS_WHITELIST:
@@ -67,13 +68,21 @@ def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> b
         if not t_clean:
             continue
         t_lower = t_clean.lower()
+        t_base = t_lower.replace(".exe", "").replace(".sys", "").replace(".dll", "").strip()
+        if not t_base:
+            continue
         if len(t_clean) <= exact_for_short:
             if t_lower == text_lower:
                 return True
             if re.search(rf"\b{re.escape(t_lower)}\b", text_lower):
                 return True
         else:
-            if t_lower in text_lower:
+            # Prefer bounded token matching to avoid broad substring false-positives.
+            if t_lower == text_lower or t_lower == basename:
+                return True
+            if re.search(rf"\b{re.escape(t_base)}\b", text_norm):
+                return True
+            if basename.startswith(t_base) or basename.endswith(t_base):
                 return True
     return False
 
