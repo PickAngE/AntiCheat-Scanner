@@ -1,12 +1,12 @@
-# AntiCheat Scanner
+# Anti-Cheat Scanner
 
 ## Description
 Forensic tool for Windows environments designed to identify the active presence and execution traces of anti-cheat software. The script performs multi-layered analysis across User-mode, Kernel-mode, Registry, and File System.
 
 ## Detection Targets
 - ACE (AntiCheatExpert)
-- Vanguard (Riot Games) (may not work properly)
-- Ricochet (Activision) (may not work properly)
+- Vanguard (Riot Games)
+- Ricochet (Activision)
 - EA Anti-Cheat / Javelin
 - EAC (EasyAntiCheat)
 - BattlEye
@@ -36,15 +36,15 @@ Forensic tool for Windows environments designed to identify the active presence 
 
 ## Installation
 1. Clone the repository:
-   ```
+   ```powershell
    git clone https://github.com/PickAngE/AntiCheat-Scanner.git
    ```
 2. Navigate to the project folder:
-   ```
+   ```powershell
    cd AntiCheat-Scanner
    ```
 3. Install dependencies:
-   ```
+   ```powershell
    pip install -r requirements.txt
    ```
 
@@ -52,6 +52,10 @@ Forensic tool for Windows environments designed to identify the active presence 
 ```powershell
 python main.py
 ```
+*Script handles UAC elevation automatically.*
+
+## Limitations
+This tool relies on heuristic indicators and may produce **false positives** or **miss some detections**. Execution traces can be incomplete due to system permissions, anti-cheat self-protection mechanisms, or recent updates. Always cross-validate findings with other sources.
 
 ## License
 Proprietary. Copyright (c) 2026 PickAngE.
