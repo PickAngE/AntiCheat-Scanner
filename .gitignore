@@ -8,18 +8,8 @@ __pycache__
 .venv
 venv
 AntiCheat_Report_*.txt
-<<<<<<< HEAD
 PushGithub.bat
 query
 .vs
 .git
-=======
-<<<<<<< HEAD
 PushGithub.bat
-query
-.vs
-.git
-=======
-PushGithub.bat
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
