@@ -1,30 +1,17 @@
-import os
+﻿import os
 import subprocess
 import ctypes
 import sys
 import hashlib
 import time
-<<<<<<< HEAD
 from functools import lru_cache
 from typing import Dict, List, Optional
-=======
-<<<<<<< HEAD
-from functools import lru_cache
-from typing import Dict, List, Optional
-=======
-from typing import List, Optional
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 
 try:
     import win32api
 except ImportError:
     win32api = None
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,11 +21,6 @@ def ps_escape_path(path: str) -> str:
     return path.replace("'", "''")
 
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def get_drives() -> List[str]:
     drives: List[str] = []
     try:
@@ -57,24 +39,12 @@ def get_drives() -> List[str]:
                 drives.append(path)
     return drives
 
-<<<<<<< HEAD
 
 @lru_cache(maxsize=256)
-=======
-<<<<<<< HEAD
-
-@lru_cache(maxsize=256)
-=======
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def get_digital_signature(file_path: str) -> str:
     if not os.path.exists(file_path):
         return ""
     try:
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
         safe_path = ps_escape_path(file_path)
         ps_cmd = (
             f"(Get-AuthenticodeSignature -LiteralPath '{safe_path}')"
@@ -130,17 +100,6 @@ def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
 
 
 @lru_cache(maxsize=256)
-<<<<<<< HEAD
-=======
-=======
-        ps_cmd = f"(Get-AuthenticodeSignature '{file_path}').SignerCertificate.Subject"
-        output = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], text=True, errors='ignore').strip()
-        return output if output else "Unsigned/Self-signed"
-    except Exception:
-        return "Error checking"
-
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def get_file_hash(file_path: str) -> str:
     if not os.path.exists(file_path):
         return ""
@@ -150,10 +109,6 @@ def get_file_hash(file_path: str) -> str:
             for byte_block in iter(lambda: f.read(4096), b""):
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     except Exception as e:
         logger.debug("Failed to hash %s: %s", file_path, e)
         return "N/A"
@@ -172,52 +127,18 @@ def get_file_properties(file_path: str) -> dict:
     if not os.path.exists(file_path):
         return properties
 
-<<<<<<< HEAD
-=======
-=======
-    except Exception:
-        return "N/A"
-
-def get_file_properties(file_path: str) -> dict:
-    properties = {
-        "CompanyName": "", 
-        "ProductName": "", 
-        "FileDescription": "",
-        "FileVersion": "",
-        "InternalName": "",
-        "OriginalFilename": ""
-    }
-    if not os.path.exists(file_path):
-        return properties
-    
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     try:
         stat = os.stat(file_path)
         properties["CreatedAt"] = time.ctime(stat.st_ctime)
         properties["ModifiedAt"] = time.ctime(stat.st_mtime)
         properties["Size"] = f"{stat.st_size / 1024:.2f} KB"
-<<<<<<< HEAD
     except Exception as e:
         logger.debug("Failed to stat %s: %s", file_path, e)
-=======
-<<<<<<< HEAD
-    except Exception as e:
-        logger.debug("Failed to stat %s: %s", file_path, e)
-=======
-    except Exception:
-        pass
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 
     if not win32api:
         return properties
 
     try:
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
         lang, codepage = win32api.GetFileVersionInfo(file_path, "\\VarFileInfo\\Translation")[0]
         str_info_path = "\\StringFileInfo\\%04X%04X\\%s"
         for key in properties.keys():
@@ -227,32 +148,12 @@ def get_file_properties(file_path: str) -> dict:
                 val = win32api.GetFileVersionInfo(file_path, str_info_path % (lang, codepage, key))
                 properties[key] = val
             except Exception:
-<<<<<<< HEAD
-=======
-=======
-        lang, codepage = win32api.GetFileVersionInfo(file_path, '\\VarFileInfo\\Translation')[0]
-        str_info_path = u'\\StringFileInfo\\%04X%04X\\%s'
-        for key in properties.keys():
-            if key in ["CreatedAt", "ModifiedAt", "Size"]: continue
-            try:
-                val = win32api.GetFileVersionInfo(file_path, str_info_path % (lang, codepage, key))
-                properties[key] = val
-            except:
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
                 pass
     except Exception:
         pass
     return properties
 
-<<<<<<< HEAD
 
-=======
-<<<<<<< HEAD
-
-=======
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def is_admin() -> bool:
     try:
         if os.name == "nt":
@@ -261,14 +162,7 @@ def is_admin() -> bool:
     except Exception:
         return False
 
-<<<<<<< HEAD
 
-=======
-<<<<<<< HEAD
-
-=======
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def request_admin_rerun() -> bool:
     if os.name != "nt" or is_admin():
         return False

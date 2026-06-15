@@ -1,15 +1,13 @@
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
-import logging
+﻿import logging
 import re
 from typing import List
 
 logger = logging.getLogger(__name__)
 
 try:
-    from rapidfuzz.fuzz import ratio as fuzzy_ratio
+    from rapidfuzz.fuzz import ratio as _fuzzy_ratio_raw
+    def fuzzy_ratio(s1: str, s2: str) -> float:
+        return _fuzzy_ratio_raw(s1, s2) / 100.0
 except ImportError:
     from difflib import SequenceMatcher
     def fuzzy_ratio(s1: str, s2: str) -> float:
@@ -18,29 +16,13 @@ except ImportError:
 WINDOWS_WHITELIST = frozenset([
     "services.exe", "svchost.exe", "lsass.exe", "wininit.exe",
     "winlogon.exe", "csrss.exe", "explorer.exe", "smss.exe",
-<<<<<<< HEAD
-=======
-=======
-from typing import List
-import re
-from difflib import SequenceMatcher
-
-WINDOWS_WHITELIST = [
-    "services.exe", "svchost.exe", "lsass.exe", "wininit.exe", 
-    "winlogon.exe", "csrss.exe", "explorer.exe", "smss.exe", 
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     "spoolsv.exe", "searchindexer.exe", "runtimebroker.exe",
     "fontdrvhost.exe", "dwm.exe", "ctfmon.exe", "taskhostw.exe",
     "sihost.exe", "smartscreen.exe", "conhost.exe", "audiodg.exe",
     "cmd.exe", "powershell.exe", "pwsh.exe", "wt.exe",
     "vds.exe", "wmiprvse.exe", "dllhost.exe", "werfault.exe",
     "wermgr.exe", "taskmgr.exe", "regedit.exe", "perfmon.exe",
-    "system", "registry", "net.exe", "net1.exe", "reg.exe"
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
+    "system", "registry", "net.exe", "net1.exe", "reg.exe",
 ])
 
 _EXT_PAT = re.compile(r"(\.exe|\.sys)", re.IGNORECASE)
@@ -64,14 +46,8 @@ def extract_exe_path(binpath: str) -> str:
         return text[: m.end()]
 
     return text.split()[0] if text else ""
-<<<<<<< HEAD
-=======
-=======
-]
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 
-def content_matches(text: str, targets: List[str], min_length: int = 3) -> bool:
+def content_matches(text: str, targets: List[str], min_length: int = 4) -> bool:
     if not text:
         return False
     text_lower = text.lower()
@@ -105,12 +81,13 @@ def folder_name_matches_target(folder_name: str, targets: List[str]) -> bool:
                 return True
     return False
 
-def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> bool:
+_WORD_BOUNDARY = re.compile(r"[^a-z0-9]+")
+
+def target_matches(text: str, targets: List[str]) -> bool:
     if not text:
         return False
     text_lower = text.lower()
-    text_norm = re.sub(r"[^a-z0-9]+", " ", text_lower)
-    
+
     basename = text_lower.split("\\")[-1]
     if basename in WINDOWS_WHITELIST:
         return False
@@ -126,33 +103,19 @@ def target_matches(text: str, targets: List[str], exact_for_short: int = 3) -> b
             continue
         t_lower = t_clean.lower()
         t_base = t_lower.replace(".exe", "").replace(".sys", "").replace(".dll", "").strip()
-        if not t_base:
+        if not t_base or len(t_base) < 3:
             continue
-        if len(t_clean) <= exact_for_short:
-            if t_lower == text_lower:
-                return True
-            if re.search(rf"\b{re.escape(t_lower)}\b", text_lower):
-                return True
-        else:
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
-=======
-            # Prefer bounded token matching to avoid broad substring false-positives.
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
-            if t_lower == text_lower or t_lower == basename:
-                return True
-            if re.search(rf"\b{re.escape(t_base)}\b", text_norm):
-                return True
-            if basename.startswith(t_base) or basename.endswith(t_base):
-                return True
+
+        name_stripped = basename.replace(".exe", "").replace(".sys", "").replace(".dll", "")
+
+        if t_lower == basename or name_stripped == t_base:
+            return True
+
+        name_for_regex = _WORD_BOUNDARY.sub(" ", name_stripped)
+        if re.search(rf"\b{re.escape(t_base)}\b", name_for_regex):
+            return True
     return False
 
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def _normalize_registry_path(path_str: str) -> str:
     text = path_str.strip().replace("/", "\\")
     if ":" in text and not text.upper().startswith(("HKEY_", "HKLM", "HKCU")):
@@ -170,11 +133,6 @@ def registry_path_matches(entry: str, hive: str, subkey: str) -> bool:
     return path_has_folder_segment(entry_norm, expected)
 
 
-<<<<<<< HEAD
-=======
-=======
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
 def path_has_folder_segment(path_str: str, folder_signature: str) -> bool:
     if not path_str or not folder_signature:
         return False
@@ -200,20 +158,17 @@ def metadata_matches(properties: dict, target_companies: List[str], target_produ
         return False
     comp = str(properties.get("CompanyName", "")).lower()
     prod = str(properties.get("ProductName", "")).lower()
-    desc = str(properties.get("FileDescription", "")).lower()
     if "microsoft" in comp:
         return False
     if comp:
         for target in target_companies:
-            if target.lower() in comp:
+            t = target.lower()
+            if len(t) >= 4 and t in comp:
                 return True
     if prod:
         for target in target_products:
-            if target.lower() in prod:
-                return True
-    if desc:
-        for target in target_products:
-            if target.lower() in desc:
+            t = target.lower()
+            if len(t) >= 4 and t in prod:
                 return True
     return False
 
@@ -231,13 +186,4 @@ def fuzzy_matches(text: str, target: str, threshold: float = 0.8) -> bool:
         return True
     if len(t1) < 4 or len(t2) < 4:
         return t1 == t2
-<<<<<<< HEAD
     return fuzzy_ratio(t1, t2) >= threshold
-=======
-<<<<<<< HEAD
-    return fuzzy_ratio(t1, t2) >= threshold
-=======
-    ratio = SequenceMatcher(None, t1, t2).ratio()
-    return ratio >= threshold
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
