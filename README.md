@@ -1,165 +1,127 @@
-PROPRIETARY SOFTWARE LICENSE AGREEMENT
-<<<<<<< HEAD
-PickAngE Anticheat Scanner
-Copyright (c) 2026 PickAngE. All rights reserved.
+# Anti-Cheat Scanner
 
+A Windows forensic utility that detects the presence, configuration, and execution traces of anti-cheat software through multi-layer system analysis.
 
-SECTION 1 - PURPOSE AND SCOPE OF THE SOFTWARE
+## Detection Methods
 
-This End User License Agreement ("EULA") is a legal agreement between you (an individual or legal entity, hereinafter "the User") and PickAngE (hereinafter "the Author"), concerning the software "PickAngE Anticheat Scanner", including all source files, binaries, documentation, and associated resources (hereinafter "the Software").
+The scanner collects evidence across the following subsystems:
 
-BY ACCESSING, DOWNLOADING, OR USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THE TERMS OF THIS AGREEMENT. IF YOU DO NOT ACCEPT THESE TERMS, YOU MUST IMMEDIATELY CEASE ALL USE OF THE SOFTWARE.
+**Kernel & Drivers**
+- Minifilter driver enumeration via Windows Filter Manager (`fltmc`)
+- Loaded kernel module listing via DriverQuery
+- WMI system driver cross-reference against vendor signatures
 
-The Software is a passive analysis and auditing tool for third-party anticheat software, including - without limitation - Javelin (Electronic Arts Inc.), BattlEye (BattlEye Innovations e.K.), Easy Anti-Cheat (Epic Games Inc.), HoYoProtect (HoYoverse / miHoYo Co., Ltd.), and their equivalents. It enables the User to inspect data collected by such software on their own machine, for the purpose of:
+**Processes & Services**
+- Service Control Manager (SCM) database query for registered anti-cheat services
+- Active process and loaded module analysis with signature matching
 
-  a) Exercising their right of access to personal data in accordance with the
-     General Data Protection Regulation (GDPR, Regulation (EU) 2016/679);
-  b) Assessing security and stability risks to their own system;
-  c) Conducting personal and educational cybersecurity research;
-  d) Verifying the compliance of third-party software with applicable
-     privacy laws.
+**File System & Binary Forensics**
+- Authenticode digital signature verification (batched via PowerShell)
+- PE metadata extraction (CompanyName, ProductName, etc.)
+- SHA256 hashing for binary identification
 
-The Software is designed to operate exclusively on machines owned or legally controlled by the User. Any use on a third-party system without explicit authorization is strictly prohibited.
+**Execution Artifacts**
+- BAM (Background Activity Moderator) per-user SID analysis
+- AppCompatFlags execution history (Compatibility Assistant)
+- Shell MuiCache scan
+- Prefetch file parsing
 
+**Registry Forensics**
+- Installation keys and persistence mechanism analysis
+- WOW6432Node cross-architecture scanning
+- App Paths and Uninstall key inspection
 
-SECTION 2 - GRANT OF LICENSE
+**Network & IPC**
+- Named pipe namespace scan (`\\.\pipe\`)
+- DNS resolver cache inspection
+- Active connection enumeration via `netstat`
 
-Subject to compliance with the terms of this Agreement, the Author grants the User a personal, non-exclusive, non-transferable, non-sublicensable, and revocable license, permitting the User solely to:
+**System Configuration**
+- BCD (Boot Configuration Data) boot entry and kernel flag checks
+- Scheduled task enumeration
+- Windows Defender exclusion and Firewall rule review
 
-  a) View the Software's source code for personal evaluation purposes;
-  b) Run the Software on their own computer systems;
-  c) Contribute to the Software through official channels designated by the Author,
-     subject to the Author's express acceptance.
+## Supported Targets
 
+- ACE (AntiCheatExpert)
+- Vanguard (Riot Games)
+- Ricochet (Activision / Call of Duty)
+- EA Anti-Cheat / Javelin
+- EAC (EasyAntiCheat)
+- BattlEye
+- HoYoProtect (mhyprot)
 
-SECTION 3 - RESTRICTIONS
+> **Note:** Detection for Vanguard and Ricochet may not work reliably due to their evolving kernel-mode components.
 
-The User is expressly prohibited from:
+## Architecture
 
-  a) Copying, reproducing, or duplicating all or part of the Software;
-  b) Creating derivative works, adaptations, forks, or modified versions
-     of the Software on any platform;
-  c) Distributing, selling, sublicensing, renting, lending, or otherwise making
-     the Software available to third parties, for a fee or free of charge;
-  d) Using the Software for any commercial purpose, direct or indirect;
-  e) Incorporating all or part of the Software into another software product;
-  f) Removing, altering, or obscuring any intellectual property notices
-     contained in the Software;
-  g) Using the Software to analyze or access a third party's systems without
-     their explicit prior consent;
-  h) Using the Software for any illegal purpose or in violation of public order.
+All detection subsystems inherit from a common `BaseChecker` interface and share an optimized O(1) signature index for high-volume matching. The scanner runs checkers in parallel (up to 4 concurrent workers) and aggregates findings into a unified report.
 
+| Checker | Coverage |
+|---|---|
+| `ServiceChecker` | SCM-registered anti-cheat services |
+| `ProcessChecker` | Running processes and loaded modules |
+| `DriverFileChecker` | Kernel-mode driver files |
+| `FileChecker` | Filesystem binary artifacts |
+| `RegistryChecker` | Registry keys and values |
+| `TaskChecker` | Scheduled tasks |
+| `TraceChecker` | Execution artifacts (BAM, Prefetch, MUICache, etc.) |
 
-SECTION 4 - INTELLECTUAL PROPERTY
+## Requirements
 
-The Author retains all intellectual property rights in the Software, including copyright, patents, trademarks, and trade secrets. This Agreement does not transfer any ownership rights to the User. All rights not expressly granted herein are reserved by the Author.
+- Windows 10 / 11 (x64)
+- Python 3.10+
+- Administrator privileges (recommended for full coverage)
 
-The Software is protected under French intellectual property law, in particular Articles L.111-1 et seq. of the French Intellectual Property Code (Code de la Propriété Intellectuelle - CPI), as well as the Berne Convention and the TRIPS Agreement.
+## Dependencies
 
-The trade names Javelin, BattlEye, Easy Anti-Cheat, HoYoProtect, and any other trademarks mentioned in this document or in the Software are the exclusive property of their respective owners. Their mention is purely descriptive and does not imply any affiliation, endorsement, or partnership with the Author.
+| Package | Version |
+|---|---|
+| `psutil` | >=5.9, <7 |
+| `pywin32` | >=306, <400 |
+| `rapidfuzz` | >=3.0, <4 |
 
+## Installation
 
-SECTION 5 - LEGAL FRAMEWORK AND COMPLIANCE
+```powershell
+git clone https://github.com/PickAngE/Anti-Cheat-Scanner.git
+cd Anti-Cheat-Scanner
+pip install -r requirements.txt
+```
 
-5.1 Governing Law
-This Agreement is governed exclusively by French law. Any dispute relating to its interpretation or performance shall be subject to the exclusive jurisdiction of the competent French courts.
+## Usage
 
-5.2 GDPR Compliance
-The Software is developed in compliance with Regulation (EU) 2016/679 (GDPR). Its purpose is specifically to enable users to exercise their rights, including:
+Run with administrator privileges:
 
-  - The right of access (Article 15 GDPR);
-  - The right to information (Articles 13 and 14 GDPR);
-  - The right to data portability (Article 20 GDPR).
+```powershell
+python main.py
+```
 
-The anticheat software targeted by this tool collects data on machines belonging to users residing in the European Union. As such, their publishers are subject to GDPR obligations regardless of their geographic location (Article 3, paragraph 2, GDPR).
+The script will automatically prompt for elevation via UAC if not already running as admin.
 
-5.3 Legality of Software Analysis
-Analyzing software installed on one's own machine is lawful under French law, in particular by virtue of:
+Options:
 
-  - Interoperability rights (Article L.122-6-1 of the French CPI);
-  - Cybersecurity research exemptions for systems of which the user is the
-    legitimate administrator (Articles 323-1 et seq. of the French Penal Code).
+| Flag | Description |
+|---|---|
+| `--no-pause` | Exit immediately after scan (useful for automation/CI) |
+| `--quiet`   | Suppress debug output; show only warnings and errors |
 
-5.4 International Jurisdiction
-The Author is domiciled in France. Any legal action initiated by a foreign party against the Author would be subject to EU private international law, in particular the Brussels I bis Regulation (Regulation (EU) No 1215/2012). French courts may have jurisdiction where the alleged damage occurs on French territory.
+### Output
 
-The Author declares acting in good faith, for the purpose of transparency and protection of users' fundamental rights, and not to infringe upon the intellectual property rights of third parties.
+Results are written to an `AntiCheat_Report_<timestamp>.txt` file in the project directory, including detected software, matched signatures, and subsystem findings.
 
+## Technical Notes
 
-SECTION 6 - LIMITATION OF LIABILITY
+- **Automatic privilege elevation**: Requests Administrator privileges via UAC when detected as non-admin, with an option to continue with limited coverage.
+- **Parallel execution**: Checkers run concurrently via `ThreadPoolExecutor` (up to 4 workers) to reduce scan time.
+- **Optimized signature indexing**: Builds an O(1) lookup index from the signature database for high-volume string matching across all subsystems.
+- **Batched Authenticode verification**: Digital signatures are verified in a single PowerShell invocation per batch to minimize process overhead.
+- **Segment-based path matching**: Filesystem scans use folder segment matching to reduce false positives.
 
-6.1 Provided "As Is"
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+## Disclaimer
 
-6.2 User's Responsibility
-The User is solely and entirely responsible for:
+This tool is intended for forensic analysis, system auditing, and educational purposes only. Detection results are based on heuristic indicators and historical artifacts; they may contain false positives or miss obfuscated or unknown anti-cheat implementations. Always cross-validate findings with additional forensic tools.
 
-  a) Any sanction, ban, suspension, or penalty imposed by a game publisher,
-     distribution platform (Steam, Epic Games, EA App, etc.), or any other
-     third-party service;
-  b) Any system instability, data loss, or malfunction occurring during or after
-     execution of the Software;
-  c) The lawfulness of their use of the Software in their jurisdiction;
-  d) Any decision made based on information provided by the Software.
+## License
 
-6.3 Exclusion of Liability
-To the fullest extent permitted by applicable law, the Author shall not be liable for any direct, indirect, incidental, special, or consequential damages arising from the use of or inability to use the Software.
-
-6.4 Voluntary Use
-Use of the Software is entirely voluntary. The User acknowledges awareness of the potential risks and expressly consents to them.
-
-
-SECTION 7 - NO SUPPORT FOR CHEATING
-
-The Software is not designed, developed, or distributed for the purpose of facilitating cheating in video games or any other online environment. It contains no functionality allowing modification of game behavior, code injection into third-party processes, or circumvention of protection mechanisms.
-
-Its sole purpose is passive auditing and transparency regarding data collected by third-party software on the User's own machine.
-
-
-SECTION 8 - TERMINATION
-
-This license terminates automatically and without notice upon violation of any of its terms. Upon termination, the User must cease all use of the Software and destroy all copies in their possession. The Author reserves the right to revoke this license at any time, with reasonable notice except in the case of material violation.
-
-
-SECTION 9 - SEVERABILITY
-
-If any provision of this Agreement is found to be invalid or unenforceable, the remaining provisions shall remain in full force and effect.
-
-
-SECTION 10 - ENTIRE AGREEMENT
-
-This Agreement constitutes the entire agreement between the Author and the User regarding the Software and supersedes all prior agreements on the same subject.
-
-
-For any questions, contact the Author through the official GitHub repository of the project.
-
-Copyright (c) 2026 PickAngE. All rights reserved.
-=======
-
-Copyright (c) 2026 PickAngE. All rights reserved.
-
-1. GRANT OF LICENSE
-This script and all associated files (the "Software") are the sole property of PickAngE (the "Licensor"). The Licensor hereby grants you a personal, non-exclusive, non-transferable, and non-sublicensable license to view and run the Software for private evaluation purposes only.
-
-2. RESTRICTIONS
-You are strictly prohibited from:
-- Forking and Derivative Works: You may not create "forks," copies, adaptations, or derivative versions of this Software on any platform (e.g., GitHub).
-- Redistribution: You may not distribute, sub-license, lease, or otherwise make the Software available to any third party.
-- Commercial Use: You may not use the Software for any commercial purposes.
-- Modification: You may not alter or translate the Software code.
-
-3. OWNERSHIP
-The Licensor retains all right, title, and interest in and to the Software source code. No ownership rights are transferred to you.
-
-4. LEGAL DISCLAIMER & LIMITATION OF LIABILITY
-CRITICAL: USE AT YOUR OWN RISK AND VOLITION. YOU ARE 100% RESPONSIBLE FOR ALL OUTCOMES.
-
-The Licensor provides the Software "AS IS" and makes NO GUARANTEES of any kind. By using this Software, you acknowledge and agree that:
-- Account Safety & Bans: You are solely and 100% responsible for any account bans, suspensions, shadow-bans, or penalties incurred from any anti-cheat systems, game platforms, or services. The Licensor shall NOT be held liable under any circumstances.
-- Technical Issues: You are 100% responsible for any system instability, crashes, data loss, or OS-level problems that may occur during or after the execution of the script.
-- No Support/Liability: You are "on your own" regarding any problems encountered. The Licensor takes no responsibility for troubleshooting or resolving issues arising from the use of this script.
-- Voluntary Use: Your decision to run this script is entirely of your own volition. You waive any right to hold the Licensor accountable for any damages, direct or indirect.
-
-5. TERMINATION
-This license is effective until terminated. Violation of any of these terms will result in immediate and automatic termination of your right to use the Software.
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
+Proprietary. See [LICENSE](LICENSE) for full terms.
