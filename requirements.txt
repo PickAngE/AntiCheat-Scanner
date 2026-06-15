@@ -1,0 +1,14 @@
+<<<<<<< HEAD
+psutil>=5.9.0,<7
+pywin32>=306,<400
+rapidfuzz>=3.0.0,<4
+=======
+<<<<<<< HEAD
+psutil>=5.9.0,<7
+pywin32>=306,<400
+rapidfuzz>=3.0.0,<4
+=======
+psutil
+pywin32
+>>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
+>>>>>>> 979330d (update 2026-06-15 16:33:37)
