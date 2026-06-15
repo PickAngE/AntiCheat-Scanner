@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
-import logging
+﻿import logging
 import re
 from typing import List, Tuple
 import winreg
@@ -35,19 +31,6 @@ class RegistryChecker(BaseChecker):
             self._all_targets_cache[sources] = result
         return self._all_targets_cache[sources]
 
-<<<<<<< HEAD
-=======
-=======
-import re
-from typing import List, Tuple
-import winreg
-from config.signatures import AntiCheatInfo
-class RegistryChecker:
-    def __init__(self, ac_database: List[AntiCheatInfo]) -> None:
-        self.ac_database = ac_database
-        self.found: List[str] = []
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     def check(self) -> None:
         for ac in self.ac_database:
             for hive_str, subkey in ac.registry:
@@ -71,21 +54,10 @@ class RegistryChecker:
                 entry = f"{hive_str}\\{subkey}"
                 if entry not in self.found:
                     self.found.append(entry)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
             except FileNotFoundError:
                 pass
         except Exception as e:
             logger.debug("_check_key_exists %s\\%s failed: %s", hive_str, subkey, e)
-<<<<<<< HEAD
-=======
-=======
-            except FileNotFoundError: pass
-        except Exception: pass
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     def _scan_uninstall_keys(self) -> None:
         hives = [("HKEY_LOCAL_MACHINE", winreg.HKEY_LOCAL_MACHINE), ("HKEY_CURRENT_USER", winreg.HKEY_CURRENT_USER)]
         paths = [r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall", r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"]
@@ -149,20 +121,7 @@ class RegistryChecker:
             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run",
         ]
         hives = [("HKEY_LOCAL_MACHINE", winreg.HKEY_LOCAL_MACHINE), ("HKEY_CURRENT_USER", winreg.HKEY_CURRENT_USER)]
-<<<<<<< HEAD
         all_targets = self._get_targets("processes+services+products")
-=======
-<<<<<<< HEAD
-        all_targets = self._get_targets("processes+services+products")
-=======
-        all_targets = []
-        for ac in self.ac_database:
-            for item in ac.processes + ac.services + ac.products:
-                t = item.lower().replace(".exe", "").replace(".sys", "")
-                if len(t) >= 4:
-                    all_targets.append(t)
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
         for hive_name, hive in hives:
             for path in startup_paths:
                 try:
@@ -191,29 +150,10 @@ class RegistryChecker:
             key_path = r"Software\Classes\Local Settings\Software\Microsoft\Windows\Shell\MuiCache"
             handle = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path)
             num_values = winreg.QueryInfoKey(handle)[1]
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
             all_targets = self._get_targets("processes+products")
             pattern = None
             if all_targets:
                 pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
-<<<<<<< HEAD
-=======
-=======
-            all_targets = []
-            for ac in self.ac_database:
-                for item in ac.processes + ac.products:
-                    t = item.lower().replace(".exe", "").replace(".sys", "")
-                    if len(t) >= 4:
-                        all_targets.append(t)
-            pattern = None
-            if all_targets:
-                pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
-                
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
             for i in range(num_values):
                 try:
                     val_name, _, _ = winreg.EnumValue(handle, i)
@@ -222,51 +162,20 @@ class RegistryChecker:
                         entry = f"MUICACHE EXECUTION: {val_name}"
                         if entry not in self.found:
                             self.found.append(entry)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
                 except OSError:
                     pass
             winreg.CloseKey(handle)
         except (FileNotFoundError, OSError) as e:
             logger.debug("_scan_muicache failed: %s", e)
-<<<<<<< HEAD
-=======
-=======
-                except OSError: pass
-            winreg.CloseKey(handle)
-        except (FileNotFoundError, OSError): pass
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
     def _scan_appcompat(self) -> None:
         try:
             key_path = r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store"
             handle = winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path)
             num_values = winreg.QueryInfoKey(handle)[1]
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
             all_targets = self._get_targets("processes+products")
             pattern = None
             if all_targets:
                 pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
-<<<<<<< HEAD
-=======
-=======
-            all_targets = []
-            for ac in self.ac_database:
-                for item in ac.processes + ac.products:
-                    t = item.lower().replace(".exe", "").replace(".sys", "")
-                    if len(t) >= 4:
-                        all_targets.append(t)
-            pattern = None
-            if all_targets:
-                pattern = re.compile(rf"\b({'|'.join(re.escape(t) for t in all_targets)})\b")
-                
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
             for i in range(num_values):
                 try:
                     val_name, _, _ = winreg.EnumValue(handle, i)
@@ -275,20 +184,8 @@ class RegistryChecker:
                         entry = f"APPCOMPAT HISTORY: {val_name}"
                         if entry not in self.found:
                             self.found.append(entry)
-<<<<<<< HEAD
-=======
-<<<<<<< HEAD
->>>>>>> 979330d (update 2026-06-15 16:33:37)
                 except OSError:
                     pass
             winreg.CloseKey(handle)
         except (FileNotFoundError, OSError) as e:
             logger.debug("_scan_appcompat failed: %s", e)
-<<<<<<< HEAD
-=======
-=======
-                except OSError: pass
-            winreg.CloseKey(handle)
-        except (FileNotFoundError, OSError): pass
->>>>>>> e285a17f27e49403e5e4eb37a3f873a4bc5e00ae
->>>>>>> 979330d (update 2026-06-15 16:33:37)
