@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import concurrent.futures
 import logging
 import sys
@@ -48,7 +48,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    log_level = logging.WARNING if args.quiet else logging.DEBUG
+    log_level = logging.WARNING if args.quiet else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)-7s %(name)s: %(message)s")
 
     exit_code = 0
