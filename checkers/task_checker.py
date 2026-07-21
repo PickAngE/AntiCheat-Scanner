@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Set
 
 from .base import BaseChecker
+from .detection import CATEGORY_TASK, Detection
 from .matchers import content_matches, metadata_matches, target_matches
 from utils.attribution import resolve_ac_name
 from utils.helpers import get_file_properties
@@ -13,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 class TaskChecker(BaseChecker):
+    CATEGORY = CATEGORY_TASK
+
     def __init__(self, ac_database, sig_index=None) -> None:
         super().__init__(ac_database, sig_index)
         self.target_names: List[str] = []
@@ -33,11 +36,13 @@ class TaskChecker(BaseChecker):
             return
         found_set.add(entry)
         ac_name = resolve_ac_name(entry, self.ac_database, self.sig_index)
-        self.found.append({"text": entry, "ac_name": ac_name})
+        self.found.append(Detection(
+            category=CATEGORY_TASK, text=entry, ac_name=ac_name,
+        ))
 
     def _scan_dir_recursive(self, directory: Path) -> None:
         try:
-            found_set = {item["text"] if isinstance(item, dict) else item for item in self.found}
+            found_set = {item.text for item in self.found}
             for item in directory.iterdir():
                 if item.is_dir():
                     self._scan_dir_recursive(item)
@@ -79,7 +84,7 @@ class TaskChecker(BaseChecker):
 
     def _collect_prefetch_metadata(self, directory: Path) -> None:
         try:
-            found_set = {item["text"] if isinstance(item, dict) else item for item in self.found}
+            found_set = {item.text for item in self.found}
             for item in directory.glob("*.pf"):
                 fname = item.name.upper()
                 for target in self.target_names:

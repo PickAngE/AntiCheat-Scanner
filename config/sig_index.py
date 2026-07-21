@@ -1,5 +1,9 @@
+import logging
 from typing import Dict, List, Optional
+
 from config.signatures import AntiCheatInfo
+
+logger = logging.getLogger(__name__)
 
 
 class SignatureIndex:
@@ -18,6 +22,13 @@ class SignatureIndex:
                     continue
                 existing = instance._index.get(key)
                 if existing and existing != ac.name:
+                    logger.warning(
+                        "Signature collision for %r: %s vs %s (keeping %s)",
+                        key,
+                        existing,
+                        ac.name,
+                        existing,
+                    )
                     continue
                 instance._index[key] = ac.name
         return instance

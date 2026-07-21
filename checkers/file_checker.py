@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import List, Set
 
 from .base import BaseChecker
-from .matchers import folder_name_matches_target, metadata_matches, target_matches
+from .detection import CATEGORY_FOLDER, Detection
+from .matchers import folder_name_matches_target, metadata_matches
 from utils.helpers import get_drives, get_file_properties
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,8 @@ _USER_RELATIVE_ROOTS = frozenset(["Downloads", "Desktop", "Documents", "Temp", "
 
 
 class FileChecker(BaseChecker):
+    CATEGORY = CATEGORY_FOLDER
+
     def __init__(self, ac_database, sig_index=None) -> None:
         super().__init__(ac_database, sig_index)
         self.target_names: List[str] = []
@@ -49,9 +52,11 @@ class FileChecker(BaseChecker):
             self._collect_from_drive(Path(drive), paths_to_check, user_profile)
         for path_str in sorted(paths_to_check):
             try:
-                path = Path(path_str)
-                if path.exists():
-                    self.found.append(str(path))
+                path_obj = Path(path_str)
+                if path_obj.exists():
+                    self.found.append(Detection(
+                        category=CATEGORY_FOLDER, text=str(path_obj),
+                    ))
             except OSError:
                 continue
 
@@ -81,7 +86,9 @@ class FileChecker(BaseChecker):
                 paths.add(str(potential_root / target_name))
             self._scan_and_validate(potential_root, paths)
 
-    def _scan_and_validate(self, root: Path, paths: Set[str]) -> None:
+    def _scan_and_validate(self, root: Path, paths: Set[str], depth: int = 0) -> None:
+        if depth > 2:
+            return
         try:
             for item in root.iterdir():
                 if folder_name_matches_target(item.name, self.target_names):
@@ -90,24 +97,12 @@ class FileChecker(BaseChecker):
                     props = get_file_properties(str(item))
                     for ac in self.ac_database:
                         if metadata_matches(props, ac.companies, ac.products):
-                            self.found.append(
-                                f"METADATA MATCH: {item} ({props.get('CompanyName')})"
-                            )
+                            self.found.append(Detection(
+                                category=CATEGORY_FOLDER,
+                                text=f"METADATA MATCH: {item} ({props.get('CompanyName')})",
+                            ))
                             break
                 if item.is_dir():
-                    try:
-                        for sub in item.iterdir():
-                            if folder_name_matches_target(sub.name, self.target_names):
-                                paths.add(str(sub))
-                            if sub.is_file() and sub.suffix.lower() in (".exe", ".sys"):
-                                props = get_file_properties(str(sub))
-                                for ac in self.ac_database:
-                                    if metadata_matches(props, ac.companies, ac.products):
-                                        self.found.append(
-                                            f"METADATA MATCH: {sub} ({props.get('CompanyName')})"
-                                        )
-                                        break
-                    except OSError:
-                        pass
+                    self._scan_and_validate(item, paths, depth + 1)
         except OSError as e:
             logger.debug("_scan_and_validate %s failed: %s", root, e)

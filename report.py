@@ -1,54 +1,25 @@
-﻿import os
-from typing import Any, Dict, List, Optional, Union
+﻿import json
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
+from checkers.detection import (
+    CATEGORY_DRV,
+    CATEGORY_FOLDER,
+    CATEGORY_PROC,
+    CATEGORY_REG,
+    CATEGORY_SVC,
+    CATEGORY_TASK,
+    CATEGORY_TRACE,
+    CheckerResults,
+    Detection,
+)
 from config.signatures import AntiCheatInfo
 from config.sig_index import SignatureIndex
 from utils.logger import logger
 from utils.attribution import resolve_ac_from_folder, resolve_ac_from_registry, resolve_ac_name
 from utils.helpers import batch_get_digital_signatures, get_file_hash, get_file_properties
-from checkers.matchers import extract_exe_path, target_matches
-
-CATEGORY_SVC = "services"
-CATEGORY_PROC = "processes"
-CATEGORY_DRV = "drivers"
-CATEGORY_FOLDER = "folders"
-CATEGORY_REG = "registry"
-CATEGORY_TASK = "tasks"
-CATEGORY_TRACE = "traces"
-
-TraceEntry = Union[str, Dict[str, Any]]
-TaskEntry = Union[str, Dict[str, Any]]
-
-
-def _trace_text(entry: TraceEntry) -> str:
-    if isinstance(entry, dict):
-        return str(entry.get("text", ""))
-    return str(entry)
-
-
-def _trace_ac_name(entry: TraceEntry) -> Optional[str]:
-    if isinstance(entry, dict):
-        return entry.get("ac_name")
-    return None
-
-
-def _trace_active(entry: TraceEntry) -> bool:
-    if isinstance(entry, dict):
-        return bool(entry.get("active"))
-    text = _trace_text(entry)
-    return "DRIVERQUERY: Active" in text or "FILTER DRIVER:" in text
-
-
-def _task_text(entry: TaskEntry) -> str:
-    if isinstance(entry, dict):
-        return str(entry.get("text", ""))
-    return str(entry)
-
-
-def _task_ac_name(entry: TaskEntry) -> Optional[str]:
-    if isinstance(entry, dict):
-        return entry.get("ac_name")
-    return None
+from checkers.matchers import target_matches
 
 
 def _driver_fs_path(path: str) -> Optional[str]:
@@ -63,21 +34,26 @@ def _driver_fs_path(path: str) -> Optional[str]:
     return None
 
 
+def _build_tech_from_detection(det: Detection) -> Optional[dict]:
+    if det.tech:
+        return det.tech
+    if det.raw and isinstance(det.raw, dict):
+        return {
+            "name": det.raw.get("name", det.text),
+            "path": det.raw.get("exe", ""),
+        }
+    return None
+
+
 def build_found_map(
     ac_database: List[AntiCheatInfo],
-    svc_found: List[dict],
-    proc_found: List[dict],
-    driver_found: List[str],
-    folder_found: List[str],
-    reg_found: List[str],
-    task_found: List[TaskEntry],
-    trace_found: List[TraceEntry],
+    checker_results: CheckerResults,
     sig_index: Optional[SignatureIndex] = None,
 ) -> Dict[str, Any]:
     found_map: Dict[str, Any] = {}
     tech_info: List[dict] = []
 
-    def _add(ac_name: str, category: str, desc: str, active: bool = False, tech: Optional[dict] = None) -> None:
+    def _add(ac_name: Optional[str], category: str, desc: str, active: bool = False, tech: Optional[dict] = None) -> None:
         if not ac_name:
             return
         entry = found_map.setdefault(
@@ -100,80 +76,51 @@ def build_found_map(
             tech["ac"] = ac_name
             tech_info.append(tech)
 
-    for s in svc_found:
-        svc_name = str(s.get("name") or "")
-        svc_display = str(s.get("display_name") or "")
-        label = svc_display or svc_name
-        active = s.get("status") == "running"
-        ac_name = s.get("ac_name") or resolve_ac_name(
-            svc_name,
-            ac_database,
-            sig_index,
+    for det in checker_results.get(CATEGORY_SVC, []):
+        raw = det.raw or {}
+        svc_name = str(raw.get("name") or "")
+        svc_display = str(raw.get("display_name") or "")
+        ac_name = det.ac_name or resolve_ac_name(
+            svc_name, ac_database, sig_index,
         ) or resolve_ac_name(
-            svc_display,
-            ac_database,
-            sig_index,
-        ) or resolve_ac_name(
-            extract_exe_path(str(s.get("binpath") or "")),
-            ac_database,
-            sig_index,
+            svc_display, ac_database, sig_index,
         )
-        _add(
-            ac_name,
-            CATEGORY_SVC,
-            f"{label} {'[RUNNING]' if active else '[STOPPED]'}",
-            active,
-        )
+        _add(ac_name, CATEGORY_SVC, det.text, det.active)
 
-    for p in proc_found:
-        name = p.get("name", "")
-        ac_name = p.get("ac_name") or resolve_ac_name(
-            name,
-            ac_database,
-            sig_index,
-            include_drivers=False,
+    for det in checker_results.get(CATEGORY_PROC, []):
+        raw = det.raw or {}
+        ac_name = det.ac_name or resolve_ac_name(
+            str(raw.get("name", "")), ac_database, sig_index, include_drivers=False,
         ) or resolve_ac_name(
-            str(p.get("exe") or ""),
-            ac_database,
-            sig_index,
-            include_drivers=False,
+            str(raw.get("exe", "")), ac_database, sig_index, include_drivers=False,
         )
-        path = p.get("exe") or ""
-        tech = (
-            {
-                "name": name,
-                "path": path,
-                "sha": p.get("sha256"),
-                "sig": p.get("signature"),
-                "meta": p.get("metadata"),
-            }
-            if path
-            else None
-        )
-        _add(ac_name, CATEGORY_PROC, f"{name}", True, tech)
+        _add(ac_name, CATEGORY_PROC, det.text, True, _build_tech_from_detection(det))
 
-    for path in folder_found:
-        ac_name = resolve_ac_from_folder(path, ac_database)
+    for det in checker_results.get(CATEGORY_FOLDER, []):
+        path = det.text
+        ac_name = det.ac_name or resolve_ac_from_folder(path, ac_database)
         if not ac_name:
             for ac in ac_database:
                 if target_matches(path, ac.folders):
                     ac_name = ac.name
                     break
-        _add(ac_name, CATEGORY_FOLDER, f"{path}")
+        _add(ac_name, CATEGORY_FOLDER, path)
 
-    for key in reg_found:
-        ac_name = resolve_ac_from_registry(key, ac_database, sig_index)
-        _add(ac_name, CATEGORY_REG, f"{key}")
+    for det in checker_results.get(CATEGORY_REG, []):
+        ac_name = det.ac_name or resolve_ac_from_registry(det.text, ac_database, sig_index)
+        _add(ac_name, CATEGORY_REG, det.text)
 
-    driver_paths = [
+    driver_detections = checker_results.get(CATEGORY_DRV, [])
+    driver_fs_paths = [
         fs_path
-        for path in driver_found
-        if (fs_path := _driver_fs_path(path)) is not None
+        for det in driver_detections
+        if (fs_path := _driver_fs_path(det.raw if isinstance(det.raw, str) else det.text)) is not None
     ]
-    driver_signatures = batch_get_digital_signatures(driver_paths)
+    driver_signatures = batch_get_digital_signatures(driver_fs_paths)
 
-    for path in driver_found:
-        ac_name = resolve_ac_name(path, ac_database, sig_index, include_processes=False)
+    for det in driver_detections:
+        path = det.raw if isinstance(det.raw, str) else det.text
+        ac_name = det.ac_name or resolve_ac_name(path, ac_database, sig_index, include_processes=False)
         fs_path = _driver_fs_path(path)
         tech = None
         if fs_path:
@@ -184,17 +131,15 @@ def build_found_map(
                 "sig": driver_signatures.get(fs_path, ""),
                 "meta": get_file_properties(fs_path),
             }
-        _add(ac_name, CATEGORY_DRV, f"{path}", bool(fs_path), tech)
+        _add(ac_name, CATEGORY_DRV, det.text, det.active, tech)
 
-    for trace in trace_found:
-        text = _trace_text(trace)
-        ac_name = _trace_ac_name(trace) or resolve_ac_name(text, ac_database, sig_index)
-        _add(ac_name, CATEGORY_TRACE, text, _trace_active(trace))
+    for det in checker_results.get(CATEGORY_TRACE, []):
+        ac_name = det.ac_name or resolve_ac_name(det.text, ac_database, sig_index)
+        _add(ac_name, CATEGORY_TRACE, det.text, det.active)
 
-    for task in task_found:
-        text = _task_text(task)
-        ac_name = _task_ac_name(task) or resolve_ac_name(text, ac_database, sig_index)
-        _add(ac_name, CATEGORY_TASK, text)
+    for det in checker_results.get(CATEGORY_TASK, []):
+        ac_name = det.ac_name or resolve_ac_name(det.text, ac_database, sig_index)
+        _add(ac_name, CATEGORY_TASK, det.text)
 
     return {"found_map": found_map, "technical_info": tech_info}
 
@@ -276,3 +221,27 @@ def write_report(data_package: Dict[str, Any], total_found: int) -> None:
     logger.log("=" * 60)
     logger.log(" SCAN COMPLETE ".center(60))
     logger.log("=" * 60 + "\n")
+
+
+def _serialize_found_map(found_map: Dict[str, Any]) -> Dict[str, Any]:
+    serialized: Dict[str, Any] = {}
+    for ac_name, data in found_map.items():
+        serialized[ac_name] = {
+            "running": data.get("running", False),
+        }
+        for cat in _CATEGORY_ORDER:
+            items = data.get(cat, set())
+            if items:
+                serialized[ac_name][cat] = sorted(items)
+    return serialized
+
+
+def write_json_report(data_package: Dict[str, Any], total_found: int, output_path: Path) -> None:
+    payload = {
+        "total_detections": total_found,
+        "anti_cheats": _serialize_found_map(data_package["found_map"]),
+        "technical_info": data_package.get("technical_info", []),
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=False)
