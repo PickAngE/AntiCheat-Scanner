@@ -1,19 +1,27 @@
 ﻿from .base import BaseChecker
-from .service_checker import ServiceChecker
-from .process_checker import ProcessChecker
-from .driver_checker import DriverFileChecker
-from .file_checker import FileChecker
-from .registry_checker import RegistryChecker
-from .task_checker import TaskChecker
-from .trace_checker import TraceChecker
+from .detection import (
+    ALL_CATEGORIES,
+    CATEGORY_DRV,
+    CATEGORY_FOLDER,
+    CATEGORY_PROC,
+    CATEGORY_REG,
+    CATEGORY_SVC,
+    CATEGORY_TASK,
+    CATEGORY_TRACE,
+    CheckerResults,
+    Detection,
+)
 
 __all__ = [
     "BaseChecker",
-    "ServiceChecker",
-    "ProcessChecker",
-    "DriverFileChecker",
-    "FileChecker",
-    "RegistryChecker",
-    "TaskChecker",
-    "TraceChecker",
+    "Detection",
+    "CheckerResults",
+    "ALL_CATEGORIES",
+    "CATEGORY_SVC",
+    "CATEGORY_PROC",
+    "CATEGORY_DRV",
+    "CATEGORY_FOLDER",
+    "CATEGORY_REG",
+    "CATEGORY_TASK",
+    "CATEGORY_TRACE",
 ]

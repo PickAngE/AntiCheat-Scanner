@@ -1,17 +1,19 @@
 ﻿import logging
 import os
-import subprocess
 from pathlib import Path
 from typing import List
 
 from .base import BaseChecker
+from .detection import CATEGORY_DRV, Detection
 from .matchers import metadata_matches
-from utils.helpers import get_file_properties, ps_escape_path
+from utils.helpers import batch_get_digital_signatures, get_file_properties
 
 logger = logging.getLogger(__name__)
 
 
 class DriverFileChecker(BaseChecker):
+    CATEGORY = CATEGORY_DRV
+
     def check(self) -> None:
         system_root = os.environ.get("SystemRoot", r"C:\Windows")
         drivers_path = Path(system_root) / "System32" / "drivers"
@@ -27,59 +29,59 @@ class DriverFileChecker(BaseChecker):
             for file_path in drivers_path.glob("*.sys"):
                 fname = file_path.name.lower()
                 if fname in target_drivers_set:
-                    self.found.append(str(file_path))
+                    self.found.append(Detection(
+                        category=CATEGORY_DRV,
+                        text=str(file_path),
+                        active=True,
+                        raw=str(file_path),
+                    ))
                     continue
                 props = get_file_properties(str(file_path))
                 for ac in self.ac_database:
                     if metadata_matches(props, ac.companies, ac.products):
-                        self.found.append(
-                            f"DRIVER METADATA: {file_path} ({props.get('CompanyName')})"
-                        )
+                        self.found.append(Detection(
+                            category=CATEGORY_DRV,
+                            text=f"DRIVER METADATA: {file_path} ({props.get('CompanyName')})",
+                            active=True,
+                            raw=str(file_path),
+                        ))
                         break
         except Exception as e:
             logger.debug("DriverFileChecker scan failed: %s", e)
 
         self._check_certificates(drivers_path, target_drivers_set)
 
-    def _check_certificates(self, drivers_path: Path, already_matched: set) -> None:
+    def _check_certificates(self, drivers_path: Path, already_matched: frozenset) -> None:
         try:
             all_companies: List[str] = []
             for ac in self.ac_database:
                 all_companies.extend(ac.companies)
 
-            safe_path = ps_escape_path(str(drivers_path))
-            ps_cmd = (
-                f"Get-ChildItem -LiteralPath '{safe_path}' -Filter '*.sys' "
-                "-ErrorAction SilentlyContinue | "
-                "ForEach-Object { "
-                "  $sig = Get-AuthenticodeSignature -LiteralPath $_.FullName "
-                "-ErrorAction SilentlyContinue; "
-                "  if ($sig.SignerCertificate) { "
-                "    $_.FullName + '|' + $sig.SignerCertificate.Subject "
-                "  } "
-                "}"
-            )
-            output = subprocess.check_output(
-                ["powershell", "-NoProfile", "-Command", ps_cmd],
-                text=True,
-                errors="ignore",
-                timeout=120,
-            )
-            found_set = set(self.found)
-            for line in output.splitlines():
-                parts = line.split("|", 1)
-                if len(parts) != 2:
-                    continue
-                path, subject = parts[0].strip(), parts[1].strip()
+            sys_paths = [
+                str(path)
+                for path in drivers_path.glob("*.sys")
+                if path.name.lower() not in already_matched
+            ]
+            if not sys_paths:
+                return
+
+            signatures = batch_get_digital_signatures(sys_paths)
+            found_texts = {d.text for d in self.found}
+            for path, subject in signatures.items():
                 if Path(path).name.lower() in already_matched:
                     continue
                 subject_lower = subject.lower()
                 for company in all_companies:
                     if company.lower() in subject_lower:
                         entry = f"DRIVER CERT: {path} (Signed: {subject})"
-                        if entry not in found_set:
-                            found_set.add(entry)
-                            self.found.append(entry)
+                        if entry not in found_texts:
+                            found_texts.add(entry)
+                            self.found.append(Detection(
+                                category=CATEGORY_DRV,
+                                text=entry,
+                                active=True,
+                                raw=path,
+                            ))
                         break
         except Exception as e:
             logger.debug("_check_certificates failed: %s", e)

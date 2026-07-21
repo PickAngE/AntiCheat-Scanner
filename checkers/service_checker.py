@@ -4,6 +4,7 @@ from typing import List
 import psutil
 
 from .base import BaseChecker
+from .detection import CATEGORY_SVC, Detection
 from .matchers import content_matches, extract_exe_path, target_matches
 from utils.attribution import resolve_ac_name
 
@@ -11,6 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 class ServiceChecker(BaseChecker):
+    CATEGORY = CATEGORY_SVC
+
     def __init__(self, ac_database, sig_index=None) -> None:
         super().__init__(ac_database, sig_index)
         self._all_sigs: List[str] = []
@@ -44,6 +47,9 @@ class ServiceChecker(BaseChecker):
                         continue
 
                     svc_dict = service.as_dict()
+                    status = svc_dict.get("status", "")
+                    active = status == "running"
+                    label = str(svc_display or svc_name or "")
                     ac_name = resolve_ac_name(
                         svc_name,
                         self.ac_database,
@@ -57,9 +63,13 @@ class ServiceChecker(BaseChecker):
                         if exe_path
                         else None
                     )
-                    if ac_name:
-                        svc_dict["ac_name"] = ac_name
-                    self.found.append(svc_dict)
+                    self.found.append(Detection(
+                        category=CATEGORY_SVC,
+                        text=f"{label} {'[RUNNING]' if active else '[STOPPED]'}",
+                        ac_name=ac_name,
+                        active=active,
+                        raw=svc_dict,
+                    ))
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:

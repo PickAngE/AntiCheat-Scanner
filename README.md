@@ -2,6 +2,14 @@
 
 A Windows forensic utility that detects the presence, configuration, and execution traces of anti-cheat software through multi-layer system analysis.
 
+## Supported Targets
+
+- ACE (AntiCheatExpert)
+- EA Anti-Cheat / Javelin
+- EAC (EasyAntiCheat)
+- BattlEye
+- HoYoProtect (mhyprot)
+
 ## Detection Methods
 
 The scanner collects evidence across the following subsystems:
@@ -13,7 +21,7 @@ The scanner collects evidence across the following subsystems:
 
 **Processes & Services**
 - Service Control Manager (SCM) database query for registered anti-cheat services
-- Active process and loaded module analysis with signature matching
+- Active process and loaded module analysis with signature matching, fuzzy matching, and metadata fallback
 
 **File System & Binary Forensics**
 - Authenticode digital signature verification (batched via PowerShell)
@@ -41,21 +49,9 @@ The scanner collects evidence across the following subsystems:
 - Scheduled task enumeration
 - Windows Defender exclusion and Firewall rule review
 
-## Supported Targets
-
-- ACE (AntiCheatExpert)
-- Vanguard (Riot Games)
-- Ricochet (Activision / Call of Duty)
-- EA Anti-Cheat / Javelin
-- EAC (EasyAntiCheat)
-- BattlEye
-- HoYoProtect (mhyprot)
-
-> **Note:** Detection for Vanguard and Ricochet may not work reliably due to their evolving kernel-mode components.
-
 ## Architecture
 
-All detection subsystems inherit from a common `BaseChecker` interface and share an optimized O(1) signature index for high-volume matching. The scanner runs checkers in parallel (up to 4 concurrent workers) and aggregates findings into a unified report.
+All detection subsystems inherit from a common `BaseChecker` interface and return standardized `Detection` dataclass objects. An optimized O(1) signature index is used for high-volume matching. Checkers are registered in `checkers/registry.py` and run in parallel via `ThreadPoolExecutor`.
 
 | Checker | Coverage |
 |---|---|
@@ -89,15 +85,20 @@ cd Anti-Cheat-Scanner
 pip install -r requirements.txt
 ```
 
-## Usage
+### Tests
 
-Run with administrator privileges:
+```powershell
+pip install pytest
+py -3 -m pytest tests/ -q
+```
+
+## Usage
 
 ```powershell
 python main.py
 ```
 
-The script will automatically prompt for elevation via UAC if not already running as admin.
+The script automatically requests elevation via UAC when not running as administrator. If elevation is denied, the scan continues with limited coverage.
 
 Options:
 
@@ -105,15 +106,21 @@ Options:
 |---|---|
 | `--no-pause` | Exit immediately after scan (useful for automation/CI) |
 | `--quiet`   | Suppress debug output; show only warnings and errors |
+| `--output PATH` | Report file or directory for the text report |
+| `--json`    | Also write a JSON report alongside the text report |
+| `--workers N` | Maximum parallel checker workers (default: 4) |
 
 ### Output
 
-Results are written to an `AntiCheat_Report_<timestamp>.txt` file in the project directory, including detected software, matched signatures, and subsystem findings.
+Results are written to an `AntiCheat_Report_<timestamp>.txt` file, including detected software, matched signatures, and subsystem findings. With `--json`, a machine-readable `.json` report is also generated with the same data structured by anti-cheat product and category.
 
 ## Technical Notes
 
-- **Automatic privilege elevation**: Requests Administrator privileges via UAC when detected as non-admin, with an option to continue with limited coverage.
-- **Parallel execution**: Checkers run concurrently via `ThreadPoolExecutor` (up to 4 workers) to reduce scan time.
+- **Automatic privilege elevation**: Requests Administrator privileges via UAC when detected as non-admin, with a silent fallback to limited coverage if denied.
+- **Standardized detection format**: All checkers return `Detection` dataclass objects with uniform fields (`category`, `text`, `ac_name`, `active`, `raw`, `tech`), consumed by a single report builder.
+- **Parallel execution**: Checkers run concurrently via `ThreadPoolExecutor` (configurable with `--workers`).
+- **Multi-layer matching**: Exact signature match through O(1) index, fuzzy name matching via rapidfuzz, and metadata-based detection (CompanyName, ProductName, digital certificate subject).
+- **External signature database**: Anti-cheat signatures are loaded from `config/signatures.json`.
 - **Optimized signature indexing**: Builds an O(1) lookup index from the signature database for high-volume string matching across all subsystems.
 - **Batched Authenticode verification**: Digital signatures are verified in a single PowerShell invocation per batch to minimize process overhead.
 - **Segment-based path matching**: Filesystem scans use folder segment matching to reduce false positives.
