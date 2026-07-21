@@ -85,13 +85,6 @@ cd Anti-Cheat-Scanner
 pip install -r requirements.txt
 ```
 
-### Tests
-
-```powershell
-pip install pytest
-py -3 -m pytest tests/ -q
-```
-
 ## Usage
 
 ```powershell
