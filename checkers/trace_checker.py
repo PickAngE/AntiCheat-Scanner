@@ -2,7 +2,10 @@
 import os
 import re
 import csv
-from typing import List
+from typing import List, Optional
+
+from config.signatures import AntiCheatInfo
+from config.sig_index import SignatureIndex
 
 from .base import BaseChecker
 from .detection import CATEGORY_TRACE, Detection
@@ -16,14 +19,18 @@ logger = logging.getLogger(__name__)
 class TraceChecker(BaseChecker):
     CATEGORY = CATEGORY_TRACE
 
-    def __init__(self, ac_database, sig_index=None) -> None:
+    def __init__(
+        self,
+        ac_database: List[AntiCheatInfo],
+        sig_index: Optional[SignatureIndex] = None,
+    ) -> None:
         super().__init__(ac_database, sig_index)
         self._target_names: List[str] = []
         for ac in ac_database:
             self._target_names.extend(ac.services + ac.processes + ac.drivers)
         self._pattern: re.Pattern[str] = re.compile(r"(?!)")
 
-    def _get_combined_pattern(self):
+    def _get_combined_pattern(self) -> re.Pattern[str]:
         clean = [self._clean_target(t) for t in self._target_names]
         clean = list(dict.fromkeys(c for c in clean if len(c) >= 4))
         if clean:
@@ -39,11 +46,8 @@ class TraceChecker(BaseChecker):
         return target.lower().replace(".exe", "").replace(".sys", "").replace(".dll", "").strip()
 
     def _append_trace(self, text: str, active: bool = False) -> None:
-        existing = {item.text for item in self.found}
-        if text in existing:
-            return
         ac_name = resolve_ac_name(text, self.ac_database, self.sig_index)
-        self.found.append(Detection(
+        self.append_detection(Detection(
             category=CATEGORY_TRACE, text=text, ac_name=ac_name, active=active,
         ))
 
@@ -99,13 +103,9 @@ class TraceChecker(BaseChecker):
 
     def _check_named_pipes(self) -> None:
         try:
-            existing = {item.text for item in self.found}
             for pipe_name in os.listdir(r"\\.\pipe"):
                 if self._pattern.search(pipe_name):
-                    entry = f"NAMED PIPE: \\\\.\\pipe\\{pipe_name}"
-                    if entry not in existing:
-                        existing.add(entry)
-                        self._append_trace(entry)
+                    self._append_trace(f"NAMED PIPE: \\\\.\\pipe\\{pipe_name}")
         except Exception as e:
             logger.debug("_check_named_pipes failed: %s", e)
 
@@ -113,14 +113,10 @@ class TraceChecker(BaseChecker):
         output = run_cmd(["fltmc", "instances"], timeout=15)
         if not output:
             return
-        existing = {item.text for item in self.found}
         for line in output.splitlines():
             stripped = line.strip()
             if stripped and self._pattern.search(stripped):
-                entry = f"FILTER DRIVER: {stripped}"
-                if entry not in existing:
-                    existing.add(entry)
-                    self._append_trace(entry, active=True)
+                self._append_trace(f"FILTER DRIVER: {stripped}", active=True)
 
     def _check_event_logs(self) -> None:
         output = run_cmd(
@@ -149,7 +145,6 @@ class TraceChecker(BaseChecker):
                 (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows Defender\Exclusions\Paths"),
                 (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows Defender\Exclusions\Processes"),
             ]
-            existing = {item.text for item in self.found}
             for hive, subkey in paths_to_check:
                 try:
                     handle = winreg.OpenKey(hive, subkey, 0, winreg.KEY_READ)
@@ -158,10 +153,7 @@ class TraceChecker(BaseChecker):
                         try:
                             val_name, _, _ = winreg.EnumValue(handle, i)
                             if self._pattern.search(val_name):
-                                entry = f"DEFENDER EXCLUSION: {val_name}"
-                                if entry not in existing:
-                                    existing.add(entry)
-                                    self._append_trace(entry)
+                                self._append_trace(f"DEFENDER EXCLUSION: {val_name}")
                         except OSError:
                             continue
                     winreg.CloseKey(handle)
@@ -195,7 +187,6 @@ class TraceChecker(BaseChecker):
                 except FileNotFoundError:
                     return
 
-            existing = {item.text for item in self.found}
             for i in range(winreg.QueryInfoKey(bam_root)[0]):
                 try:
                     sid = winreg.EnumKey(bam_root, i)
@@ -205,10 +196,7 @@ class TraceChecker(BaseChecker):
                         try:
                             val_name, _, _ = winreg.EnumValue(sid_key, j)
                             if self._pattern.search(val_name):
-                                entry = f"BAM EXECUTION: {val_name}"
-                                if entry not in existing:
-                                    existing.add(entry)
-                                    self._append_trace(entry)
+                                self._append_trace(f"BAM EXECUTION: {val_name}")
                         except OSError:
                             continue
                     winreg.CloseKey(sid_key)
@@ -230,31 +218,51 @@ class TraceChecker(BaseChecker):
         output = run_cmd(["netstat", "-anob"], timeout=60)
         if not output:
             return
-        m = self._pattern.search(output)
-        if m:
-            self._append_trace(f"NETWORK: Active connection or listener for {m.group()}")
+        for line in output.splitlines():
+            bracket_match = re.search(r"\[([^\]]+)\]", line)
+            if not bracket_match:
+                continue
+            process_name = bracket_match.group(1)
+            m = self._pattern.search(process_name)
+            if m:
+                self._append_trace(
+                    f"NETWORK: Active connection or listener for {m.group()} ({process_name})"
+                )
 
     def _check_driverquery(self) -> None:
         output = run_cmd(["driverquery", "/v", "/fo", "csv"], timeout=60)
         if not output:
             return
         try:
-            rows = list(csv.reader(output.splitlines()))
-            if len(rows) <= 1:
-                return
+            reader = csv.DictReader(output.splitlines())
+            fieldnames = reader.fieldnames or []
+            path_col = None
+            for col in ("Path", "Chemin"):
+                if col in fieldnames:
+                    path_col = col
+                    break
+            if not path_col and fieldnames:
+                logger.debug(
+                    "driverquery: unknown header %s, falling back to index 12",
+                    fieldnames,
+                )
 
-            existing = {item.text for item in self.found}
-            for row in rows[1:]:
-                line = ",".join(row)
+            for row in reader:
+                if not row:
+                    continue
+                line = ",".join(row.values())
                 m = self._pattern.search(line)
-                if m:
-                    d_name = row[0].strip() if row else m.group()
-                    d_path = row[12].strip() if len(row) > 12 else ""
-                    entry = f"DRIVERQUERY: Active loaded driver matching {m.group()} - {d_name}"
-                    if d_path:
-                        entry += f" | {d_path}"
-                    if entry not in existing:
-                        existing.add(entry)
-                        self._append_trace(entry, active=True)
+                if not m:
+                    continue
+                d_name = next(iter(row.values()), m.group()).strip()
+                if path_col:
+                    d_path = row.get(path_col, "").strip()
+                else:
+                    values = list(row.values())
+                    d_path = values[12].strip() if len(values) > 12 else ""
+                entry = f"DRIVERQUERY: Active loaded driver matching {m.group()} - {d_name}"
+                if d_path:
+                    entry += f" | {d_path}"
+                self._append_trace(entry, active=True)
         except Exception as e:
             logger.debug("_check_driverquery parse failed: %s", e)

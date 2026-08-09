@@ -21,7 +21,7 @@ The scanner collects evidence across the following subsystems:
 
 **Processes & Services**
 - Service Control Manager (SCM) database query for registered anti-cheat services
-- Active process and loaded module analysis with signature matching, fuzzy matching, and metadata fallback
+- Active process analysis with signature matching, fuzzy matching, and metadata fallback
 
 **File System & Binary Forensics**
 - Authenticode digital signature verification (batched via PowerShell)
@@ -56,7 +56,7 @@ All detection subsystems inherit from a common `BaseChecker` interface and retur
 | Checker | Coverage |
 |---|---|
 | `ServiceChecker` | SCM-registered anti-cheat services |
-| `ProcessChecker` | Running processes and loaded modules |
+| `ProcessChecker` | Running processes and executable metadata |
 | `DriverFileChecker` | Kernel-mode driver files |
 | `FileChecker` | Filesystem binary artifacts |
 | `RegistryChecker` | Registry keys and values |
@@ -86,7 +86,6 @@ pip install -r requirements.txt
 ```
 
 ## Usage
-
 ```powershell
 python main.py
 ```
@@ -101,11 +100,12 @@ Options:
 | `--quiet`   | Suppress debug output; show only warnings and errors |
 | `--output PATH` | Report file or directory for the text report |
 | `--json`    | Also write a JSON report alongside the text report |
-| `--workers N` | Maximum parallel checker workers (default: 4) |
+| `--workers N` | Maximum parallel checker workers (default: 3; use `1` for diagnostic runs) |
+| `--depth N` | Maximum FileChecker recursion depth (default: 1) |
 
 ### Output
 
-Results are written to an `AntiCheat_Report_<timestamp>.txt` file, including detected software, matched signatures, and subsystem findings. With `--json`, a machine-readable `.json` report is also generated with the same data structured by anti-cheat product and category.
+Results are written to an `AntiCheat_Report_<timestamp>.txt` file in the current working directory (preserved after UAC elevation), including detected software, matched signatures, and subsystem findings. With `--json`, a machine-readable `.json` report is also generated with the same data structured by anti-cheat product and category.
 
 ## Technical Notes
 
@@ -115,7 +115,7 @@ Results are written to an `AntiCheat_Report_<timestamp>.txt` file, including det
 - **Multi-layer matching**: Exact signature match through O(1) index, fuzzy name matching via rapidfuzz, and metadata-based detection (CompanyName, ProductName, digital certificate subject).
 - **External signature database**: Anti-cheat signatures are loaded from `config/signatures.json`.
 - **Optimized signature indexing**: Builds an O(1) lookup index from the signature database for high-volume string matching across all subsystems.
-- **Batched Authenticode verification**: Digital signatures are verified in a single PowerShell invocation per batch to minimize process overhead.
+- **Batched Authenticode verification**: Digital signatures are verified in bounded PowerShell batches to minimize process overhead and command length.
 - **Segment-based path matching**: Filesystem scans use folder segment matching to reduce false positives.
 
 ## Disclaimer

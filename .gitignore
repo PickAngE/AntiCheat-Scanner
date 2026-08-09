@@ -18,11 +18,8 @@ query
 .vscode
 *.code-workspace
 *.pytest_cache
-pyproject.toml
 .mypy_cache
 .pytest_cache
-tests/*
-tests
 *.log
 .coverage
 htmlcov/
@@ -33,3 +30,14 @@ build/
 Thumbs.db
 *.bak
 $RECYCLE.BIN/
+.vscode/
+.vscode/*
+# Local development, review, and test artefacts
+/tests/
+/mypy.ini
+/pytest.ini
+/requirements-dev.txt
+/test_output
+/test_output.json
+/.pytest_cache/
+/.mypy_cache/

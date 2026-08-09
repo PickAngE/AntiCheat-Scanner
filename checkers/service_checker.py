@@ -1,7 +1,10 @@
 ﻿import logging
-from typing import List
+from typing import List, Optional
 
 import psutil
+
+from config.signatures import AntiCheatInfo
+from config.sig_index import SignatureIndex
 
 from .base import BaseChecker
 from .detection import CATEGORY_SVC, Detection
@@ -14,7 +17,11 @@ logger = logging.getLogger(__name__)
 class ServiceChecker(BaseChecker):
     CATEGORY = CATEGORY_SVC
 
-    def __init__(self, ac_database, sig_index=None) -> None:
+    def __init__(
+        self,
+        ac_database: List[AntiCheatInfo],
+        sig_index: Optional[SignatureIndex] = None,
+    ) -> None:
         super().__init__(ac_database, sig_index)
         self._all_sigs: List[str] = []
         for ac in ac_database:
@@ -63,7 +70,7 @@ class ServiceChecker(BaseChecker):
                         if exe_path
                         else None
                     )
-                    self.found.append(Detection(
+                    self.append_detection(Detection(
                         category=CATEGORY_SVC,
                         text=f"{label} {'[RUNNING]' if active else '[STOPPED]'}",
                         ac_name=ac_name,
@@ -73,4 +80,4 @@ class ServiceChecker(BaseChecker):
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
         except Exception as e:
-            logger.debug("ServiceChecker failed: %s", e)
+            logger.error("%s failed", type(self).__name__, exc_info=True)

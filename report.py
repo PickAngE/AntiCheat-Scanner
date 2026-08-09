@@ -34,7 +34,7 @@ def _driver_fs_path(path: str) -> Optional[str]:
     return None
 
 
-def _build_tech_from_detection(det: Detection) -> Optional[dict]:
+def _build_tech_from_detection(det: Detection) -> Optional[Dict[str, Any]]:
     if det.tech:
         return det.tech
     if det.raw and isinstance(det.raw, dict):
@@ -51,13 +51,12 @@ def build_found_map(
     sig_index: Optional[SignatureIndex] = None,
 ) -> Dict[str, Any]:
     found_map: Dict[str, Any] = {}
-    tech_info: List[dict] = []
+    tech_info: List[Dict[str, Any]] = []
 
-    def _add(ac_name: Optional[str], category: str, desc: str, active: bool = False, tech: Optional[dict] = None) -> None:
-        if not ac_name:
-            return
+    def _add(ac_name: Optional[str], category: str, desc: str, active: bool = False, tech: Optional[Dict[str, Any]] = None) -> None:
+        target = ac_name or "(unattributed)"
         entry = found_map.setdefault(
-            ac_name,
+            target,
             {
                 "running": False,
                 CATEGORY_SVC: set(),
@@ -73,7 +72,7 @@ def build_found_map(
         if active:
             entry["running"] = True
         if tech:
-            tech["ac"] = ac_name
+            tech["ac"] = target
             tech_info.append(tech)
 
     for det in checker_results.get(CATEGORY_SVC, []):
