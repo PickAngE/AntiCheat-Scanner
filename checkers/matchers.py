@@ -153,7 +153,7 @@ def path_has_folder_segment(path_str: str, folder_signature: str) -> bool:
             return True
     return False
 
-def metadata_matches(properties: dict, target_companies: List[str], target_products: List[str]) -> bool:
+def metadata_matches(properties: dict[str, object], target_companies: List[str], target_products: List[str]) -> bool:
     if not properties:
         return False
     comp = str(properties.get("CompanyName", "")).lower()
@@ -172,15 +172,23 @@ def metadata_matches(properties: dict, target_companies: List[str], target_produ
                 return True
     return False
 
+def _strip_exe_sys_dll(name: str) -> str:
+    for ext in (".exe", ".sys", ".dll"):
+        if name.endswith(ext):
+            return name[: -len(ext)]
+    return name
+
+
 def fuzzy_matches(text: str, target: str, threshold: float = 0.8) -> bool:
     if not text or not target:
         return False
-    t1 = text.lower().strip()
-    t2 = target.lower().strip()
-    
-    basename = t1.split("\\")[-1]
-    if basename in WINDOWS_WHITELIST:
+
+    original_basename = text.lower().strip().split("\\")[-1]
+    if original_basename in WINDOWS_WHITELIST:
         return False
+
+    t1 = _strip_exe_sys_dll(text.lower().strip())
+    t2 = _strip_exe_sys_dll(target.lower().strip())
 
     if t1 == t2:
         return True

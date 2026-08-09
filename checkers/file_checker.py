@@ -1,7 +1,10 @@
 ﻿import logging
 import os
 from pathlib import Path
-from typing import List, Set
+from typing import List, Optional, Set
+
+from config.signatures import AntiCheatInfo
+from config.sig_index import SignatureIndex
 
 from .base import BaseChecker
 from .detection import CATEGORY_FOLDER, Detection
@@ -33,12 +36,28 @@ COMMON_ROOTS = [
 
 _USER_RELATIVE_ROOTS = frozenset(["Downloads", "Desktop", "Documents", "Temp", "AppData\\Local\\Temp"])
 
+_SKIP_DIRS = frozenset({
+    "System Volume Information", "$Recycle.Bin", "WinSxS", "Installer",
+    "servicing", "node_modules", "INetCache",
+    "Temp", "OneDrive", "NTUSER.DAT",
+})
+
+_METADATA_SCAN_ROOTS = frozenset({
+    "Downloads", "Desktop", "Documents", "Temp", "AppData\\Local\\Temp",
+})
+
 
 class FileChecker(BaseChecker):
     CATEGORY = CATEGORY_FOLDER
 
-    def __init__(self, ac_database, sig_index=None) -> None:
+    def __init__(
+        self,
+        ac_database: List[AntiCheatInfo],
+        sig_index: Optional[SignatureIndex] = None,
+        max_depth: int = 1,
+    ) -> None:
         super().__init__(ac_database, sig_index)
+        self.max_depth = max_depth
         self.target_names: List[str] = []
         for ac in ac_database:
             self.target_names.extend(ac.folders)
@@ -54,11 +73,14 @@ class FileChecker(BaseChecker):
             try:
                 path_obj = Path(path_str)
                 if path_obj.exists():
-                    self.found.append(Detection(
+                    self.append_detection(Detection(
                         category=CATEGORY_FOLDER, text=str(path_obj),
                     ))
-            except OSError:
-                continue
+            except OSError as e:
+                self.skipped_count += 1
+                logger.warning("FileChecker: could not inspect %s: %s", path_str, e)
+        if self.skipped_count:
+            logger.info("FileChecker: %d paths skipped (inaccessible)", self.skipped_count)
 
     def _collect_from_env_vars(self, paths: Set[str]) -> None:
         env_vars = ["APPDATA", "LOCALAPPDATA", "USERPROFILE", "PROGRAMFILES", "PROGRAMFILES(X86)"]
@@ -69,6 +91,9 @@ class FileChecker(BaseChecker):
             base = Path(val)
             for target_name in self.target_names:
                 paths.add(str(base / target_name))
+
+    def _should_scan_metadata(self, root_name: str) -> bool:
+        return root_name in _METADATA_SCAN_ROOTS
 
     def _collect_from_drive(
         self, drive_path: Path, paths: Set[str], user_profile: str | None = None
@@ -84,25 +109,45 @@ class FileChecker(BaseChecker):
                 continue
             for target_name in self.target_names:
                 paths.add(str(potential_root / target_name))
-            self._scan_and_validate(potential_root, paths)
+            if folder_name_matches_target(potential_root.name, self.target_names):
+                self._scan_and_validate(
+                    potential_root, paths,
+                    depth=0,
+                    scan_metadata=self._should_scan_metadata(root_name),
+                )
 
-    def _scan_and_validate(self, root: Path, paths: Set[str], depth: int = 0) -> None:
-        if depth > 2:
+    def _scan_and_validate(
+        self,
+        root: Path,
+        paths: Set[str],
+        depth: int = 0,
+        scan_metadata: bool = False,
+    ) -> None:
+        if depth > self.max_depth:
             return
         try:
             for item in root.iterdir():
+                if item.name in _SKIP_DIRS:
+                    continue
                 if folder_name_matches_target(item.name, self.target_names):
                     paths.add(str(item))
-                if item.is_file() and item.suffix.lower() in (".exe", ".sys"):
-                    props = get_file_properties(str(item))
-                    for ac in self.ac_database:
-                        if metadata_matches(props, ac.companies, ac.products):
-                            self.found.append(Detection(
-                                category=CATEGORY_FOLDER,
-                                text=f"METADATA MATCH: {item} ({props.get('CompanyName')})",
-                            ))
-                            break
+                if scan_metadata and item.is_file() and item.suffix.lower() in (".exe", ".sys"):
+                    try:
+                        props = get_file_properties(str(item))
+                        for ac in self.ac_database:
+                            if metadata_matches(props, ac.companies, ac.products):
+                                self.append_detection(Detection(
+                                    category=CATEGORY_FOLDER,
+                                    text=f"METADATA MATCH: {item} ({props.get('CompanyName')})",
+                                ))
+                                break
+                    except Exception as e:
+                        self.fail_count += 1
+                        logger.error(
+                            "FileChecker: metadata scan failed on %s: %s",
+                            item, e, exc_info=True,
+                        )
                 if item.is_dir():
-                    self._scan_and_validate(item, paths, depth + 1)
+                    self._scan_and_validate(item, paths, depth + 1, scan_metadata)
         except OSError as e:
             logger.debug("_scan_and_validate %s failed: %s", root, e)

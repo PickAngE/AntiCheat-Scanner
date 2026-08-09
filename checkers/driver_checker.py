@@ -1,7 +1,8 @@
 ﻿import logging
 import os
+import re
 from pathlib import Path
-from typing import List
+from typing import FrozenSet, List
 
 from .base import BaseChecker
 from .detection import CATEGORY_DRV, Detection
@@ -25,11 +26,11 @@ class DriverFileChecker(BaseChecker):
             target_drivers.extend(ac.drivers)
         target_drivers_set = frozenset(d.lower() for d in target_drivers)
 
-        try:
-            for file_path in drivers_path.glob("*.sys"):
+        for file_path in drivers_path.glob("*.sys"):
+            try:
                 fname = file_path.name.lower()
                 if fname in target_drivers_set:
-                    self.found.append(Detection(
+                    self.append_detection(Detection(
                         category=CATEGORY_DRV,
                         text=str(file_path),
                         active=True,
@@ -39,19 +40,24 @@ class DriverFileChecker(BaseChecker):
                 props = get_file_properties(str(file_path))
                 for ac in self.ac_database:
                     if metadata_matches(props, ac.companies, ac.products):
-                        self.found.append(Detection(
+                        self.append_detection(Detection(
                             category=CATEGORY_DRV,
                             text=f"DRIVER METADATA: {file_path} ({props.get('CompanyName')})",
                             active=True,
                             raw=str(file_path),
                         ))
                         break
-        except Exception as e:
-            logger.debug("DriverFileChecker scan failed: %s", e)
+            except Exception as e:
+                self.fail_count += 1
+                logger.error(
+                    "DriverFileChecker: unexpected error on %s: %s",
+                    file_path, e, exc_info=True,
+                )
+                continue
 
         self._check_certificates(drivers_path, target_drivers_set)
 
-    def _check_certificates(self, drivers_path: Path, already_matched: frozenset) -> None:
+    def _check_certificates(self, drivers_path: Path, already_matched: FrozenSet[str]) -> None:
         try:
             all_companies: List[str] = []
             for ac in self.ac_database:
@@ -66,22 +72,22 @@ class DriverFileChecker(BaseChecker):
                 return
 
             signatures = batch_get_digital_signatures(sys_paths)
-            found_texts = {d.text for d in self.found}
             for path, subject in signatures.items():
                 if Path(path).name.lower() in already_matched:
                     continue
                 subject_lower = subject.lower()
                 for company in all_companies:
-                    if company.lower() in subject_lower:
+                    c = company.lower()
+                    if len(c) < 4:
+                        continue
+                    if re.search(rf"\b{re.escape(c)}\b", subject_lower):
                         entry = f"DRIVER CERT: {path} (Signed: {subject})"
-                        if entry not in found_texts:
-                            found_texts.add(entry)
-                            self.found.append(Detection(
-                                category=CATEGORY_DRV,
-                                text=entry,
-                                active=True,
-                                raw=path,
-                            ))
+                        self.append_detection(Detection(
+                            category=CATEGORY_DRV,
+                            text=entry,
+                            active=True,
+                            raw=path,
+                        ))
                         break
         except Exception as e:
-            logger.debug("_check_certificates failed: %s", e)
+            logger.error("%s failed", type(self).__name__, exc_info=True)

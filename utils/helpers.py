@@ -4,11 +4,12 @@ import ctypes
 import sys
 import hashlib
 import time
+import threading
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 try:
-    import win32api
+    import win32api  # type: ignore[import-untyped]
 except ImportError:
     win32api = None
 
@@ -16,12 +17,17 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+PS_CMD_TIMEOUT = 120
+BATCH_SIZE = 20
+_PS_SEMAPHORE = threading.RLock()
+
 
 def ps_escape_path(path: str) -> str:
     return path.replace("'", "''")
 
 
 def get_drives() -> List[str]:
+    """Return mounted drive letters (win32api, fallback C:–H:)."""
     drives: List[str] = []
     try:
         if win32api is not None:
@@ -50,23 +56,24 @@ def get_digital_signature(file_path: str) -> str:
             f"(Get-AuthenticodeSignature -LiteralPath '{safe_path}')"
             ".SignerCertificate.Subject"
         )
-        output = subprocess.check_output(
-            ["powershell", "-NoProfile", "-Command", ps_cmd],
-            text=True,
-            errors="ignore",
-        ).strip()
+        with _PS_SEMAPHORE:
+            output = subprocess.check_output(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                text=True,
+                errors="ignore",
+                timeout=PS_CMD_TIMEOUT,
+            ).strip()
         return output if output else "Unsigned/Self-signed"
+    except subprocess.TimeoutExpired:
+        logger.warning("get_digital_signature timeout for %s", file_path)
+        return "Signature timeout"
     except Exception as e:
         logger.debug("Failed to get digital signature for %s: %s", file_path, e)
         return "Error checking"
 
 
-def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
+def _batch_chunk(valid_paths: List[str]) -> Dict[str, str]:
     result: Dict[str, str] = {}
-    valid_paths = [p for p in file_paths if os.path.exists(p)]
-    if not valid_paths:
-        return result
-
     script_lines = [
         "$files = @(",
         *[f"    '{ps_escape_path(p)}'" for p in valid_paths],
@@ -86,16 +93,29 @@ def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
             ["powershell", "-NoProfile", "-Command", ps_script],
             text=True,
             errors="ignore",
-            timeout=120,
+            timeout=PS_CMD_TIMEOUT,
         )
         for line in output.splitlines():
             parts = line.split("|", 1)
             if len(parts) == 2:
                 result[parts[0].strip()] = parts[1].strip()
     except Exception as e:
-        logger.debug("batch_get_digital_signatures failed: %s", e)
+        logger.debug("_batch_chunk failed: %s", e)
         for p in valid_paths:
             result[p] = get_digital_signature(p)
+    return result
+
+
+def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
+    result: Dict[str, str] = {}
+    valid_paths = [p for p in file_paths if os.path.exists(p)]
+    if not valid_paths:
+        return result
+
+    with _PS_SEMAPHORE:
+        for chunk_start in range(0, len(valid_paths), BATCH_SIZE):
+            chunk = valid_paths[chunk_start:chunk_start + BATCH_SIZE]
+            result.update(_batch_chunk(chunk))
     return result
 
 
@@ -115,8 +135,8 @@ def get_file_hash(file_path: str) -> str:
 
 
 @lru_cache(maxsize=256)
-def get_file_properties(file_path: str) -> dict:
-    properties = {
+def get_file_properties(file_path: str) -> Dict[str, object]:
+    properties: Dict[str, object] = {
         "CompanyName": "",
         "ProductName": "",
         "FileDescription": "",
@@ -147,10 +167,10 @@ def get_file_properties(file_path: str) -> dict:
             try:
                 val = win32api.GetFileVersionInfo(file_path, str_info_path % (lang, codepage, key))
                 properties[key] = val
-            except Exception:
-                pass
-    except Exception:
-        pass
+            except Exception as e:
+                logger.debug("GetFileVersionInfo %s key=%s failed: %s", file_path, key, e)
+    except Exception as e:
+        logger.debug("GetFileVersionInfo failed for %s: %s", file_path, e)
     return properties
 
 
@@ -171,7 +191,7 @@ def request_admin_rerun() -> bool:
         params = f'"{script}"'
         if len(sys.argv) > 1:
             params += " " + " ".join(f'"{a}"' for a in sys.argv[1:])
-        work_dir = os.path.dirname(script)
+        work_dir = os.getcwd()
         ctypes.windll.shell32.ShellExecuteW(
             None, "runas", sys.executable, params, work_dir, 1
         )

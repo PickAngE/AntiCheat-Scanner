@@ -11,6 +11,7 @@ from config.sig_index import SignatureIndex
 from utils.helpers import is_admin, request_admin_rerun
 from utils.logger import logger
 from checkers.registry import CHECKER_CLASSES
+from checkers.file_checker import FileChecker
 from report import build_found_map, count_unique_detections, write_json_report, write_report
 
 
@@ -39,11 +40,28 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workers",
         type=int,
-        default=4,
+        default=3,
         metavar="N",
-        help="Maximum parallel checker workers (default: 4)",
+        help="Maximum parallel checker workers (default: 3)",
+    )
+    parser.add_argument(
+        "--depth",
+        type=int,
+        default=1,
+        metavar="N",
+        help="FileChecker recursive scan depth (default: 1)",
     )
     return parser.parse_args()
+
+
+def _build_checkers(ac_database, sig_index, scan_depth: int):  # type: ignore[no-untyped-def]
+    checkers = []
+    for cls in CHECKER_CLASSES:
+        if cls is FileChecker:
+            checkers.append(cls(ac_database, sig_index, max_depth=scan_depth))  # type: ignore[abstract,call-arg]
+        else:
+            checkers.append(cls(ac_database, sig_index))  # type: ignore[abstract]
+    return checkers
 
 
 def main() -> int:
@@ -64,20 +82,28 @@ def main() -> int:
 
         logger.log("[*] Running subsystem checks in parallel (this may take a minute)...")
 
-        checkers = [cls(ac_database, sig_index) for cls in CHECKER_CLASSES]
+        checkers = _build_checkers(ac_database, sig_index, args.depth)
         max_workers = min(len(checkers), max(1, args.workers))
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
             fut_map = {pool.submit(c.check): c for c in checkers}
             for future in concurrent.futures.as_completed(fut_map):
                 checker = fut_map[future]
+                checker_name = type(checker).__name__
                 try:
                     future.result()
-                    logger.log(f"  [+] {type(checker).__name__} complete")
+                    suffix = ""
+                    if checker.skipped_count:
+                        suffix = f" ({checker.skipped_count} paths skipped)"
+                    logger.log(f"  [+] {checker_name} complete{suffix}")
                 except Exception as e:
                     exit_code = 1
-                    logger.log(f"  [!] {type(checker).__name__} failed: {e}")
-                    logger.log("  [!] Checker failure details — see log for traceback")
+                    logger.log(f"  [!] {checker_name} failed: {e}")
+                    tb = traceback.format_exc()
+                    logger.log("  [!] " + "\n  [!] ".join(line for line in tb.splitlines()))
+                    logger.log("  [!] " + "-" * 50)
+                if checker.fail_count:
+                    logger.log(f"  [!] {checker_name} skipped {checker.fail_count} items due to errors")
 
         checker_results = {checker.CATEGORY: checker.found for checker in checkers}
         data_package = build_found_map(ac_database, checker_results, sig_index=sig_index)
@@ -100,7 +126,10 @@ def main() -> int:
         logger.close()
 
     if not args.no_pause:
-        input("\nPress Enter to exit...")
+        try:
+            input("\nPress Enter to exit...")
+        except EOFError:
+            pass
 
     return exit_code
 
