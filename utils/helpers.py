@@ -1,4 +1,4 @@
-﻿import os
+import os
 import subprocess
 import ctypes
 import sys
@@ -21,13 +21,63 @@ PS_CMD_TIMEOUT = 120
 BATCH_SIZE = 20
 _PS_SEMAPHORE = threading.RLock()
 
-
 def ps_escape_path(path: str) -> str:
     return path.replace("'", "''")
 
 
+
+CSIDL_PROGRAM_FILES = 0x0026
+CSIDL_PROGRAM_FILESX86 = 0x002A
+CSIDL_APP_DATA = 0x001A
+CSIDL_LOCAL_APP_DATA = 0x001C
+CSIDL_COMMON_PROGRAMS = 0x0017
+CSIDL_SYSTEM = 0x0025
+CSIDL_WINDOWS = 0x0024
+
+@lru_cache(maxsize=32)
+def get_windows_folder(csidl: int) -> str:
+    
+    
+    
+    
+        
+    
+    
+        
+    
+    try:
+        SHGetFolderPath = ctypes.windll.shell32.SHGetFolderPathW
+        SHGetFolderPath.argtypes = [
+            ctypes.c_void_p,  # hwndOwner
+            ctypes.c_int,    # nFolder
+            ctypes.c_void_p,  # hToken
+            ctypes.c_uint,    # dwFlags
+            ctypes.c_wchar_p, # pszPath
+        ]
+        path = ctypes.create_unicode_buffer(1024)
+        result = SHGetFolderPath(None, csidl, None, 0, path)
+        if result != 0:
+            logger.debug("SHGetFolderPath failed for csidl=%d (error=%d)", csidl, result)
+            return _get_default_windows_folder(csidl)
+        return path.value
+    except Exception as e:
+        logger.debug("Failed to get Windows folder (csidl=%d): %s", csidl, e)
+        return _get_default_windows_folder(csidl)
+
+def _get_default_windows_folder(csidl: int) -> str:
+    
+    defaults = {
+        CSIDL_PROGRAM_FILES: os.environ.get("ProgramFiles", "C:\\Program Files"),
+        CSIDL_PROGRAM_FILESX86: os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)"),
+        CSIDL_APP_DATA: os.environ.get("APPDATA", "C:\\Users\\Default\\AppData\\Roaming"),
+        CSIDL_LOCAL_APP_DATA: os.environ.get("LOCALAPPDATA", "C:\\Users\\Default\\AppData\\Local"),
+        CSIDL_COMMON_PROGRAMS: "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
+        CSIDL_SYSTEM: os.environ.get("SystemRoot", "C:\\Windows") + "\\System32",
+        CSIDL_WINDOWS: os.environ.get("SystemRoot", "C:\\Windows"),
+    }
+    return defaults.get(csidl, "C:\\Windows")
 def get_drives() -> List[str]:
-    """Return mounted drive letters (win32api, fallback C:–H:)."""
+    """Return mounted drive letters (win32api, fallback C-H)."""
     drives: List[str] = []
     try:
         if win32api is not None:
@@ -44,7 +94,6 @@ def get_drives() -> List[str]:
             if os.path.exists(path):
                 drives.append(path)
     return drives
-
 
 @lru_cache(maxsize=256)
 def get_digital_signature(file_path: str) -> str:
@@ -70,7 +119,6 @@ def get_digital_signature(file_path: str) -> str:
     except Exception as e:
         logger.debug("Failed to get digital signature for %s: %s", file_path, e)
         return "Error checking"
-
 
 def _batch_chunk(valid_paths: List[str]) -> Dict[str, str]:
     result: Dict[str, str] = {}
@@ -105,7 +153,6 @@ def _batch_chunk(valid_paths: List[str]) -> Dict[str, str]:
             result[p] = get_digital_signature(p)
     return result
 
-
 def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
     result: Dict[str, str] = {}
     valid_paths = [p for p in file_paths if os.path.exists(p)]
@@ -117,7 +164,6 @@ def batch_get_digital_signatures(file_paths: List[str]) -> Dict[str, str]:
             chunk = valid_paths[chunk_start:chunk_start + BATCH_SIZE]
             result.update(_batch_chunk(chunk))
     return result
-
 
 @lru_cache(maxsize=256)
 def get_file_hash(file_path: str) -> str:
@@ -132,7 +178,6 @@ def get_file_hash(file_path: str) -> str:
     except Exception as e:
         logger.debug("Failed to hash %s: %s", file_path, e)
         return "N/A"
-
 
 @lru_cache(maxsize=256)
 def get_file_properties(file_path: str) -> Dict[str, object]:
@@ -173,7 +218,6 @@ def get_file_properties(file_path: str) -> Dict[str, object]:
         logger.debug("GetFileVersionInfo failed for %s: %s", file_path, e)
     return properties
 
-
 def is_admin() -> bool:
     try:
         if os.name == "nt":
@@ -181,7 +225,6 @@ def is_admin() -> bool:
         return False
     except Exception:
         return False
-
 
 def request_admin_rerun() -> bool:
     if os.name != "nt" or is_admin():

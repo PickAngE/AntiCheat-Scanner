@@ -1,0 +1,13 @@
+{
+  "_comment": "Add files, processes, services or folders to ignore during scan.",
+  "_example": {
+    "files": ["C:\\Path\\To\\MyFile.exe"],
+    "processes": ["chrome.exe", "discord.exe"],
+    "services": ["ServiceWindowsUpdate"],
+    "folders": ["C:\\Temp\\MyFolder"]
+  },
+  "files": [],
+  "processes": [],
+  "services": [],
+  "folders": []
+}

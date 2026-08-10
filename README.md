@@ -65,7 +65,7 @@ All detection subsystems inherit from a common `BaseChecker` interface and retur
 
 ## Requirements
 
-- Windows 10 / 11 (x64)
+- Windows 11 (x64)
 - Python 3.10+
 - Administrator privileges (recommended for full coverage)
 
@@ -86,22 +86,22 @@ pip install -r requirements.txt
 ```
 
 ## Usage
+
 ```powershell
 python main.py
 ```
 
-The script automatically requests elevation via UAC when not running as administrator. If elevation is denied, the scan continues with limited coverage.
+The script automatically requests elevation via UAC. If elevation is denied, the script exits.
 
-Options:
+The script automatically requests elevation via UAC. If elevation is denied, the script exits.
 
-| Flag | Description |
-|---|---|
-| `--no-pause` | Exit immediately after scan (useful for automation/CI) |
-| `--quiet`   | Suppress debug output; show only warnings and errors |
-| `--output PATH` | Report file or directory for the text report |
-| `--json`    | Also write a JSON report alongside the text report |
-| `--workers N` | Maximum parallel checker workers (default: 3; use `1` for diagnostic runs) |
-| `--depth N` | Maximum FileChecker recursion depth (default: 1) |
+## Usage
+
+```powershell
+python main.py
+```
+
+
 
 ### Output
 
