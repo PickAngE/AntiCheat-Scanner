@@ -3,6 +3,7 @@ from typing import ClassVar, List, Set
 
 from config.signatures import AntiCheatInfo
 from config.sig_index import SignatureIndex
+from config.whitelist import is_whitelisted
 from checkers.detection import Detection
 
 
@@ -22,6 +23,10 @@ class BaseChecker(ABC):
         self.skipped_count: int = 0
 
     def append_detection(self, det: Detection) -> bool:
+        
+        if is_whitelisted(det.text, det.category):
+            return False
+        
         key = f"{det.category}::{det.text}"
         if key in self._found_keys:
             return False
