@@ -66,14 +66,12 @@
       "AppData\\Local\\AntiCheatExpert",
       "AppData\\Roaming\\Tencent\\ACE",
       "AppData\\Roaming\\AntiCheatExpert",
-      "AppData\\LocalLow\\Tencent",
       "ProgramData\\ACE",
       "ProgramData\\AntiCheatExpert",
       "ProgramData\\Tencent\\ACE",
       "ProgramData\\Tencent\\AntiCheatExpert",
       "Temp\\ACE",
       "Windows\\Temp\\ACE",
-      "Common Files\\Tencent",
       "Program Files\\AntiCheatExpert",
       "Program Files (x86)\\AntiCheatExpert"
     ],
@@ -116,10 +114,6 @@
       ],
       [
         "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\Tencent"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
         "SOFTWARE\\WOW6432Node\\Tencent\\ACE"
       ],
       [
@@ -136,13 +130,9 @@
       ]
     ],
     "companies": [
-      "Tencent",
-      "AntiCheatExpert",
-      "Tencent Technology",
-      "Tencent Technology (Shenzhen) Company Limited"
+      "AntiCheatExpert"
     ],
     "products": [
-      "ACE",
       "AntiCheatExpert",
       "Anti Cheat Expert",
       "Tencent Anti-Cheat",
@@ -159,12 +149,7 @@
       "JavService",
       "EAC",
       "EAAntiCheat.GameServiceV1",
-      "EAAntiCheat.GlobalServiceV1",
-      "EABackgroundService",
-      "EADesktop",
-      "EALocalHostSvc",
-      "Origin Client Service",
-      "OriginWebHelperService"
+      "EAAntiCheat.GlobalServiceV1"
     ],
     "processes": [
       "EAAntiCheat.GameService.exe",
@@ -172,19 +157,7 @@
       "EAAntiCheat.exe",
       "EAAntiCheat.GameServiceV1.exe",
       "Javelin.exe",
-      "JavCS.exe",
-      "bf2042.exe",
-      "BFV.exe",
-      "EADesktop.exe",
-      "EABackgroundService.exe",
-      "EAConnect_microsoft.exe",
-      "EALauncher.exe",
-      "Origin.exe",
-      "OriginWebHelperService.exe",
-      "EALocalHostSvc.exe",
-      "EAUpdate.exe",
-      "EAUpdater.exe",
-      "EAHelp.exe"
+      "JavCS.exe"
     ],
     "drivers": [
       "EAAntiCheat.sys",
@@ -201,25 +174,10 @@
       "Electronic Arts\\EAAntiCheat",
       "Javelin",
       "JavelinAntiCheat",
-      "Electronic Arts\\EA Desktop",
-      "Electronic Arts\\Origin",
-      "ProgramData\\Electronic Arts",
-      "ProgramData\\Electronic Arts\\EA Desktop",
       "ProgramData\\EA\\AC",
       "ProgramData\\eaanticheat\\Crashdumps",
-      "ProgramData\\Origin",
-      "ProgramData\\EA Desktop",
       "Program Files\\EA\\AC",
-      "AppData\\Local\\Electronic Arts",
-      "AppData\\Local\\Origin",
-      "AppData\\Local\\EA Desktop",
-      "AppData\\Local\\EADesktop",
-      "AppData\\Roaming\\Electronic Arts",
-      "AppData\\Roaming\\Origin",
-      "AppData\\Roaming\\EA Desktop",
-      "Temp\\Electronic Arts",
-      "Windows\\Temp\\EA",
-      "Common Files\\Electronic Arts"
+      "Windows\\Temp\\EA"
     ],
     "registry": [
       [
@@ -244,18 +202,6 @@
       ],
       [
         "HKEY_LOCAL_MACHINE",
-        "SYSTEM\\CurrentControlSet\\Services\\EABackgroundService"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\Electronic Arts"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\Electronic Arts\\EA Desktop"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
         "SOFTWARE\\Electronic Arts\\EAAntiCheat"
       ],
       [
@@ -264,55 +210,19 @@
       ],
       [
         "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\Origin"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\Electronic Arts"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\Electronic Arts\\EA Desktop"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
         "SOFTWARE\\WOW6432Node\\EA Anti-Cheat"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\Origin"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\Electronic Arts"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\Electronic Arts\\EA Desktop"
       ],
       [
         "HKEY_CURRENT_USER",
         "Software\\EA Anti-Cheat"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\Origin"
       ]
     ],
-    "companies": [
-      "Electronic Arts",
-      "Electronic Arts Inc.",
-      "EA Digital Illusions CE AB",
-      "EA Swiss Sarl"
-    ],
+    "companies": [],
     "products": [
       "EA Anti-Cheat",
       "EAAntiCheat",
       "Javelin",
-      "EA Desktop",
-      "Origin",
-      "EA Anti-Cheat Service",
-      "EA App"
+      "EA Anti-Cheat Service"
     ]
   },
   {
@@ -413,11 +323,7 @@
     ],
     "companies": [
       "EasyAntiCheat",
-      "Epic Games",
-      "Kamu",
-      "EasyAntiCheat Oy",
-      "Epic Games, Inc.",
-      "Epic Games AB"
+      "EasyAntiCheat Oy"
     ],
     "products": [
       "EasyAntiCheat",
@@ -537,7 +443,6 @@
       "mhyprot3",
       "HoYoProtect",
       "mhyprot",
-      "GenshinImpact",
       "mhypbase",
       "HoYoKProtect",
       "UniRTC",
@@ -546,16 +451,8 @@
       "mhyprot2_3"
     ],
     "processes": [
-      "GenshinImpact.exe",
-      "YuanShen.exe",
-      "Honkai Star Rail.exe",
-      "StarRail.exe",
-      "ZenlessZoneZero.exe",
       "HoYoProtect.exe",
-      "mhyprot2.sys",
-      "mhyprot3.sys",
       "HYPLauncher.exe",
-      "HoYoPlay.exe",
       "HoYoBase.exe",
       "HoYoShield.exe",
       "HoYoKProtect.exe"
@@ -572,51 +469,13 @@
       "HoYoShield.sys"
     ],
     "folders": [
-      "Genshin Impact",
-      "Genshin Impact Game",
-      "YuanShen",
-      "Honkai Star Rail",
-      "Honkai Star Rail Game",
-      "ZenlessZoneZero",
-      "ZenlessZoneZero Game",
-      "miHoYo",
-      "HoYoverse",
-      "miHoYo\\Genshin Impact",
-      "HoYoverse\\Genshin Impact",
-      "miHoYo\\Honkai Star Rail",
-      "HoYoverse\\Honkai Star Rail",
-      "miHoYo\\ZenlessZoneZero",
-      "HoYoverse\\ZenlessZoneZero",
-      "ProgramData\\miHoYo",
-      "ProgramData\\HoYoverse",
-      "ProgramData\\miHoYo\\Genshin Impact",
-      "ProgramData\\HoYoverse\\Genshin Impact",
-      "ProgramData\\miHoYo\\Genshin Impact\\CrashReports",
-      "ProgramData\\HoYoverse\\CrashReports",
       "AppData\\Local\\Temp\\mhyprot",
-      "AppData\\LocalLow\\miHoYo",
-      "AppData\\LocalLow\\HoYoverse",
-      "AppData\\LocalLow\\miHoYo\\Genshin Impact",
-      "AppData\\LocalLow\\miHoYo\\Honkai Star Rail",
-      "AppData\\LocalLow\\miHoYo\\ZenlessZoneZero",
-      "AppData\\Local\\miHoYo",
-      "AppData\\Local\\HoYoverse",
-      "AppData\\Local\\HoYoPlay",
-      "AppData\\Roaming\\miHoYo",
-      "AppData\\Roaming\\HoYoverse",
-      "Temp\\miHoYo",
-      "Windows\\Temp\\miHoYo",
-      "Common Files\\miHoYo"
+      "ProgramData\\mhyprot",
+      "ProgramData\\HoYoProtect",
+      "Temp\\mhyprot",
+      "Windows\\Temp\\mhyprot"
     ],
     "registry": [
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\miHoYo"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\HoYoverse"
-      ],
       [
         "HKEY_LOCAL_MACHINE",
         "SYSTEM\\CurrentControlSet\\Services\\mhyprot"
@@ -644,53 +503,10 @@
       [
         "HKEY_LOCAL_MACHINE",
         "SYSTEM\\CurrentControlSet\\Services\\HoYoShield"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\miHoYo"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\miHoYo\\Genshin Impact"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\WOW6432Node\\HoYoverse"
-      ],
-      [
-        "HKEY_LOCAL_MACHINE",
-        "SOFTWARE\\miHoYo\\Genshin Impact\\Settings"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\miHoYo"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\HoYoverse"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\miHoYo\\Genshin Impact"
-      ],
-      [
-        "HKEY_CURRENT_USER",
-        "Software\\HoYoverse\\Genshin Impact"
       ]
     ],
-    "companies": [
-      "miHoYo Co.,Ltd.",
-      "COGNOSPHERE PTE. LTD.",
-      "Cognosphere",
-      "miHoYo",
-      "HoYoverse",
-      "Shanghai miHoYo"
-    ],
+    "companies": [],
     "products": [
-      "Genshin Impact",
-      "Honkai Star Rail",
-      "Zenless Zone Zero",
-      "HoYoPlay",
       "mhyprot",
       "HoYoProtect",
       "HoYoBase",

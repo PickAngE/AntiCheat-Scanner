@@ -1,181 +1,268 @@
 PROPRIETARY SOFTWARE LICENSE AGREEMENT
 
-PickAngE Anticheat Scanner
+Anti-Cheat Scanner
 Copyright (c) 2026 PickAngE. All rights reserved.
 
 
 SECTION 1 - PURPOSE AND SCOPE
 
-This End User License Agreement ("EULA") is a legal agreement between you
-("the User") and PickAngE ("the Author") governing the software "PickAngE
-Anticheat Scanner", including all source files, binaries, documentation, and
-associated resources ("the Software").
+This End User License Agreement ("Agreement") is a legal agreement between
+the User and PickAngE (the "Author") governing the software named "Anti-Cheat
+Scanner" (the "Software"), including its source files, binaries, documentation,
+configuration files, generated reports, and associated resources.
 
-BY ACCESSING, DOWNLOADING, OR USING THE SOFTWARE, YOU AGREE TO BE BOUND BY
-THIS AGREEMENT. IF YOU DO NOT ACCEPT THESE TERMS, DO NOT USE THE SOFTWARE.
+BY ACCESSING, DOWNLOADING, OR USING THE SOFTWARE, THE USER AGREES TO BE BOUND
+BY THIS AGREEMENT. IF THE USER DOES NOT ACCEPT THESE TERMS, THE USER MUST NOT
+USE THE SOFTWARE.
 
-The Software is a passive, read-only, local analysis tool for third-party
-anticheat software, including - without limitation - Javelin (Electronic
-Arts Inc.), BattlEye (BattlEye Innovations e.K.), Easy Anti-Cheat (Epic
-Games Inc.), and HoYoProtect (HoYoverse / miHoYo Co., Ltd.). It allows the
-User to inspect data such software collects on their own machine, for
-purposes including:
+The Software is a passive forensic and audit utility for analyzing third-party
+anti-cheat software on a local Windows system. It is intended for systems that
+the User owns or is legally authorized to inspect.
 
-  a) Exercising data access rights under the GDPR (Regulation (EU) 2016/679);
-  b) Assessing security and stability risks on the User's own system;
-  c) Personal or educational cybersecurity research;
-  d) Reviewing the compliance of third-party software with applicable
-     privacy laws.
-
-The Software must be used exclusively on machines owned or legally
-controlled by the User. Use against any third-party system without explicit
-authorization is strictly prohibited.
-
-The Software contains no functionality to modify game behavior, inject code
-into third-party processes, or bypass protection mechanisms. It is not
-designed or distributed to facilitate cheating.
+The Software is not designed to modify game behavior, inject code into
+third-party processes, bypass protections, evade bans, or facilitate cheating.
 
 
-SECTION 2 - GRANT OF LICENSE
+SECTION 2 - LICENSE GRANT
 
 Subject to compliance with this Agreement, the Author grants the User a
-personal, non-exclusive, non-transferable, non-sublicensable, revocable
-license to:
+personal, non-exclusive, non-transferable, non-sublicensable, revocable license
+to:
 
-  a) View the Software's source code for personal evaluation;
-  b) Run the Software on their own computer systems;
-  c) Contribute to the Software through official channels, subject to the
-     Author's express acceptance.
+  a) View the Software source code for personal evaluation;
+  b) Install and run the Software on the User's own computer systems;
+  c) Generate and retain reports produced by the Software;
+  d) Submit contributions through channels explicitly authorized by the Author.
+
+No ownership of the Software is transferred to the User. No rights are granted
+to copy, modify, distribute, sublicense, sell, or create derivative works except
+where expressly authorized in writing by the Author.
 
 
 SECTION 3 - RESTRICTIONS
 
 The User shall not:
 
-  a) Copy, reproduce, or duplicate the Software, in whole or in part;
-  b) Create derivative works, forks, or modified versions;
-  c) Distribute, sell, sublicense, rent, or otherwise make the Software
-     available to third parties, for a fee or free of charge;
-  d) Use the Software for any commercial purpose;
-  e) Incorporate the Software into another software product;
-  f) Remove or alter any intellectual property notices;
-  g) Use the Software against a third party's systems without their
-     explicit prior consent;
-  h) Use the Software for any unlawful purpose.
+  a) Copy, reproduce, or duplicate the Software in whole or in part;
+  b) Modify, translate, adapt, or create derivative works of the Software;
+  c) Distribute, publish, sell, sublicense, rent, or otherwise make the
+     Software available to third parties, for a fee or free of charge;
+  d) Use the Software for any commercial purpose without written permission;
+  e) Incorporate the Software into another product or service;
+  f) Remove or alter copyright, trademark, license, or attribution notices;
+  g) Use the Software against a third party's system without explicit prior
+     authorization;
+  h) Use the Software to bypass, disable, evade, or interfere with anti-cheat,
+     security, monitoring, or access-control mechanisms;
+  i) Use the Software for unlawful activity or to facilitate cheating;
+  j) Misrepresent the origin, authorship, or capabilities of the Software.
 
 
-SECTION 4 - INTELLECTUAL PROPERTY
+SECTION 4 - LOCAL OPERATION AND DATA
 
-The Author retains all intellectual property rights in the Software. This
-Agreement transfers no ownership. All rights not expressly granted are
-reserved.
+The Software is designed to perform its analysis locally on the User's system.
+The Author does not intentionally transmit scanned data, reports, credentials,
+process information, registry data, environment data, or system metadata to the
+Author or to a remote service.
 
-The Software is protected under French intellectual property law
-(Code de la Propriété Intellectuelle), the Berne Convention, and the TRIPS
-Agreement.
+The Software may create local reports, cache files, temporary files, and
+configuration access records as part of its normal operation. It does not
+intentionally modify game processes, game files, Windows services, drivers, or
+registry values.
 
-Javelin, BattlEye, Easy Anti-Cheat, HoYoProtect, and any other third-party
-trademarks mentioned are the exclusive property of their respective owners.
-Their mention is purely descriptive and implies no affiliation, endorsement,
+The User is responsible for reviewing the permissions required by the Software
+and for complying with the laws and policies applicable to the User's system.
+
+
+SECTION 5 - REPORTS AND CONFIDENTIALITY
+
+Generated reports may contain sensitive information, including user paths,
+process names, service names, registry values, environment information, network
+information, hashes, file metadata, and digital-signature subjects.
+
+The User is solely responsible for protecting, storing, sharing, publishing,
+and deleting generated reports. The Author makes no representation that report
+data is complete, accurate, confidential, or suitable for any particular purpose.
+
+The User shall not publish or distribute a report in a manner that violates
+applicable law, privacy obligations, or third-party rights.
+
+
+SECTION 6 - ADMINISTRATOR PRIVILEGES AND SYSTEM RISK
+
+The Software may request Windows administrator privileges through User Account
+Control to inspect protected system data.
+
+The User must run the Software only from a trusted source and must maintain
+appropriate backups before using elevated privileges. The User is responsible
+for reviewing the output, validating findings, and deciding whether any action
+should be taken.
+
+The Author does not guarantee that the Software will be uninterrupted, that all
+system locations will be accessible, or that elevated operations will succeed
+on every Windows configuration.
+
+
+SECTION 7 - DETECTION LIMITATIONS
+
+The Software provides heuristic indicators only. A reported result does not
+guarantee the presence, absence, identity, safety, ownership, or legal status of
+any software, process, driver, service, file, or user.
+
+The Software may produce false positives, false negatives, incomplete results,
+or results that vary according to Windows version, permissions, locale, policy,
+hardware, installed software, and historical artifacts.
+
+Results must be correlated with independent forensic, administrative, legal,
+and security sources before being treated as evidence or used for any decision.
+
+
+SECTION 8 - THIRD-PARTY COMPONENTS AND TRADEMARKS
+
+The Software may reference or interact with third-party components and
+trademarks, including AntiCheatExpert, ACE, EA Javelin, Electronic Arts, Easy
+Anti-Cheat, Epic Games, BattlEye, HoYoProtect, miHoYo, and HoYoverse.
+
+All third-party names and trademarks belong to their respective owners. Their
+mention is descriptive and does not imply endorsement, sponsorship, affiliation,
 or partnership.
 
+Third-party dependencies remain subject to their own licenses. No additional
+rights to third-party components are granted by this Agreement.
 
-SECTION 5 - LEGAL CONTEXT (INFORMATIONAL ONLY)
-
-The Author believes that analyzing software installed on one's own machine,
-for the purposes described in Section 1, is consistent with French
-interoperability and cybersecurity-research provisions (Article L.122-6-1
-CPI; Articles 323-1 et seq. of the French Penal Code) and with the User's
-rights under the GDPR (Articles 13, 14, 15, 20).
-
-This section is provided for information only and does not constitute legal
-advice. It creates no warranty of lawfulness and does not override any
-separate agreement the User may have accepted with a third party (see
-Section 6.2).
+The Author does not control third-party software and is not responsible for
+third-party behavior, availability, or changes.
 
 
-SECTION 6 - LIABILITY AND RESPONSIBILITY
+SECTION 9 - CONTRIBUTIONS
 
-6.1 Provided "As Is"
+Contributions may be submitted only through channels authorized by the Author.
+Submitting a contribution does not transfer copyright, patent, trademark, or
+other intellectual-property rights.
+
+The Author may accept, reject, modify, or remove any contribution. The Author
+is not required to provide feedback or maintain any contribution.
+
+No contributor license or copyright transfer is effective unless expressly
+agreed in writing by the contributor and the Author.
+
+
+SECTION 10 - SECURITY REPORTS
+
+Security issues should be reported privately through a private channel
+designated by the Author. The User should not publicly disclose a vulnerability
+or exploit before a reasonable opportunity to remediate the issue.
+
+The Author is not obligated to provide security support, warranties, patches,
+or a response to any report.
+
+
+SECTION 11 - NO WARRANTY
+
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR
-NON-INFRINGEMENT.
+IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE, TITLE, NON-INFRINGEMENT, ACCURACY, AND UNINTERRUPTED AVAILABILITY.
 
-6.2 User's Responsibility
+The Author does not warrant that the Software will detect any particular
+anti-cheat software, that results will be complete, or that the Software will
+remain compatible with future Windows versions or third-party components.
+
+The User must independently verify all results and decisions.
+
+
+SECTION 12 - USER RESPONSIBILITY
+
 The User is solely responsible for:
 
-  a) Any sanction, ban, suspension, or penalty imposed by a game publisher
-     or platform (Steam, Epic Games, EA App, etc.) as a result of using the
-     Software, INCLUDING where such use conflicts with the End User License
-     Agreement of the analyzed anticheat software or game - a separate
-     contract the User may have already accepted and which this license
-     does not modify or override;
-  b) Any system instability, data loss, or malfunction related to the
-     Software;
-  c) The lawfulness of their use of the Software in their jurisdiction;
-  d) Any decision made based on information the Software provides.
-
-6.3 Exclusion of Liability
-To the fullest extent permitted by law, the Author shall not be liable for
-any direct, indirect, incidental, special, or consequential damages arising
-from use or inability to use the Software.
-
-6.4 Indemnification
-The User agrees to indemnify and hold the Author harmless from any claim,
-liability, damages, or expenses (including legal fees) arising from the
-User's use of the Software or violation of this Agreement, including claims
-brought by third parties such as game publishers or platform operators.
-
-6.5 Voluntary Use
-Use of the Software is entirely voluntary. The User acknowledges the risks
-described above and expressly accepts them.
+  a) The legality of installing and using the Software in the User's
+     jurisdiction;
+  b) Compliance with the terms of games, platforms, publishers, and other
+     third parties;
+  c) Maintaining backups and avoiding system instability or data loss;
+  d) Protecting credentials, reports, and other sensitive information;
+  e) Reviewing the Software source, dependencies, and execution environment;
+  f) Any decision made based on the Software or its output.
 
 
-SECTION 7 - ELIGIBILITY
+SECTION 13 - LIMITATION OF LIABILITY
 
-The Software is intended for users who have reached the age of legal
-majority in their jurisdiction, or who have obtained the consent of a
-parent or legal guardian. The Author does not knowingly collect data from
-minors.
+To the maximum extent permitted by applicable law, the Author shall not be
+liable for any direct, indirect, incidental, special, consequential, exemplary,
+or punitive damages, or for any loss of data, profits, revenue, goodwill, access,
+or system availability, arising from the Software or its use.
+
+Nothing in this Agreement excludes or limits liability that cannot lawfully be
+excluded or limited by applicable law.
 
 
-SECTION 8 - GOVERNING LAW AND JURISDICTION
+SECTION 14 - INDEMNITY
+
+To the extent permitted by applicable law, the User agrees to indemnify and
+hold the Author harmless from claims, liabilities, damages, or reasonable
+expenses arising from the User's unauthorized distribution, unlawful use,
+violation of this Agreement, or violation of a third party's rights.
+
+This obligation does not apply to the extent caused by the Author's own
+intentional misconduct or to the extent prohibited by applicable law.
+
+
+SECTION 15 - ELIGIBILITY
+
+The Software is intended for users who have reached the age of legal majority
+in their jurisdiction or who have obtained the consent of a parent or legal
+guardian.
+
+The Author does not knowingly collect data from children. The Software may
+still inspect sensitive system information when used with appropriate
+authorization.
+
+
+SECTION 16 - TERMINATION
+
+This Agreement terminates automatically if the User materially violates these
+terms. Upon termination, the User must cease using the Software and remove
+authorized copies, except for copies retained as required by law or placed in
+routine inaccessible backups.
+
+Sections concerning ownership, restrictions, third-party materials, warranty
+disclaimers, liability, indemnity, governing law, and termination survival
+remain effective to the extent applicable after termination.
+
+
+SECTION 17 - GOVERNING LAW
 
 This Agreement is governed by French law. Any dispute relating to its
-interpretation or performance shall be subject to the exclusive
-jurisdiction of the competent French courts, without prejudice to any
-mandatory consumer-protection rules applicable in the User's country of
-residence.
+interpretation or performance is subject to the competent courts of France,
+without prejudice to mandatory consumer-protection rules that may apply in the
+User's country of residence.
 
 
-SECTION 9 - TERMINATION
+SECTION 18 - MODIFICATIONS
 
-This license terminates automatically upon violation of any of its terms.
-Upon termination, the User must cease all use of the Software and destroy
-all copies in their possession. The Author may revoke this license at any
-time, with reasonable notice except in case of material violation.
+The Author may update this Agreement to reflect changes in the Software, its
+dependencies, or applicable law. Continued use after an updated Agreement is
+made available to the User constitutes acceptance to the extent permitted by
+applicable law.
 
-
-SECTION 10 - MODIFICATIONS TO THIS AGREEMENT
-
-The Author may update this Agreement from time to time. Continued use of
-the Software after an update constitutes acceptance of the revised terms.
+The User should review this Agreement before using a new version of the
+Software.
 
 
-SECTION 11 - LANGUAGE
+SECTION 19 - LANGUAGE
 
-This Agreement is drafted in English. Should a translated version be
-provided, the English version shall prevail in case of discrepancy.
-
-
-SECTION 12 - SEVERABILITY
-
-If any provision of this Agreement is found invalid or unenforceable, the
-remaining provisions remain in full force and effect.
+This Agreement is drafted in English. If a translated version is provided,
+the English version prevails to the extent permitted by applicable law.
 
 
-SECTION 13 - ENTIRE AGREEMENT
+SECTION 20 - SEVERABILITY
 
-This Agreement constitutes the entire agreement between the Author and the
-User regarding the Software and supersedes all prior agreements on the same
-subject.
+If any provision of this Agreement is found invalid or unenforceable, that
+provision shall be modified to the minimum extent necessary, or severed, and
+the remaining provisions remain in full force and effect.
+
+
+SECTION 21 - ENTIRE AGREEMENT
+
+This Agreement constitutes the entire agreement between the Author and the User
+regarding the Software and supersedes prior written or oral agreements
+concerning the same subject matter.

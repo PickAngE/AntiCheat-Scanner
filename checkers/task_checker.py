@@ -1,106 +1,113 @@
-﻿import logging
+from __future__ import annotations
+
+import logging
 import os
 import re
 from pathlib import Path
-from typing import List, Optional
+from typing import ClassVar
 
-from config.signatures import AntiCheatInfo
+from checkers.base import BaseChecker
+from checkers.detection import CATEGORY_TASK, Detection
+from checkers.matchers import content_matches, metadata_matches, target_matches
 from config.sig_index import SignatureIndex
-
-from .base import BaseChecker
-from .detection import CATEGORY_TASK, Detection
-from .matchers import content_matches, metadata_matches, target_matches
+from config.signatures import AntiCheatInfo
 from utils.attribution import resolve_ac_name
 from utils.helpers import get_file_properties
+from utils.subprocess_helper import format_error
 
 logger = logging.getLogger(__name__)
 
+_WINDOWS_PATH_PATTERN = re.compile(
+    r"[A-Za-z]:\\(?:[^<>:\"|?*\r\n]+\\)*[^<>:\"|?*\r\n]*\.(?:exe|sys)\b",
+    re.IGNORECASE,
+)
+
 
 class TaskChecker(BaseChecker):
-    CATEGORY = CATEGORY_TASK
+    CATEGORY: ClassVar[str] = CATEGORY_TASK
 
     def __init__(
         self,
-        ac_database: List[AntiCheatInfo],
-        sig_index: Optional[SignatureIndex] = None,
+        ac_database: list[AntiCheatInfo],
+        sig_index: SignatureIndex | None = None,
     ) -> None:
         super().__init__(ac_database, sig_index)
-        self.target_names: List[str] = []
-        for ac in ac_database:
-            self.target_names.extend(ac.processes + ac.services)
+        self.target_names = [name for ac in ac_database for name in ac.processes + ac.services]
 
     def check(self) -> None:
-        system_root = os.environ.get("SystemRoot", r"C:\Windows")
-        tasks_dir = Path(system_root) / "System32" / "Tasks"
-        if tasks_dir.exists():
-            self._scan_dir_recursive(tasks_dir)
-        prefetch_dir = Path(system_root) / "Prefetch"
-        if prefetch_dir.exists():
-            self._collect_prefetch_metadata(prefetch_dir)
+        system_root = os.environ.get("SYSTEMROOT", r"C:\Windows")
+        tasks_directory = Path(system_root) / "System32" / "Tasks"
+        if tasks_directory.exists():
+            self._scan_directory(tasks_directory)
+        prefetch_directory = Path(system_root) / "Prefetch"
+        if prefetch_directory.exists():
+            self._collect_prefetch(prefetch_directory)
 
-    def _append_task(self, entry: str) -> None:
-        ac_name = resolve_ac_name(entry, self.ac_database, self.sig_index)
-        self.append_detection(Detection(
-            category=CATEGORY_TASK, text=entry, ac_name=ac_name,
-        ))
+    def _append_task(self, entry: str, ac_name: str | None = None) -> None:
+        resolved_name = ac_name or resolve_ac_name(entry, self.ac_database, self.sig_index)
+        self.append_detection(Detection(category=CATEGORY_TASK, text=entry, ac_name=resolved_name))
 
-    def _scan_dir_recursive(self, directory: Path) -> None:
+    def _scan_directory(self, directory: Path) -> None:
         try:
             for item in directory.iterdir():
                 try:
                     if item.is_dir():
-                        self._scan_dir_recursive(item)
+                        self._scan_directory(item)
                         continue
-
                     triggered = False
                     if target_matches(item.name, self.target_names):
                         self._append_task(f"TASK: {item.name}")
                         triggered = True
                     try:
-                        with open(item, "r", encoding="utf-16", errors="ignore") as f:
-                            content = f.read()
-                            if not triggered:
-                                for target in self.target_names:
-                                    if content_matches(content, [target], min_length=4):
-                                        self._append_task(
-                                            f"TASK CONTENT MATCH: {item.name} (contains {target})",
-                                        )
-                                        triggered = True
-                                        break
-                            paths = re.findall(r'[a-zA-Z]:\\[^<>\\:"\|?*]+', content)
-                            for p in paths:
-                                p_clean = p.strip()
-                                if os.path.exists(p_clean) and p_clean.lower().endswith((".exe", ".sys")):
-                                    props = get_file_properties(p_clean)
-                                    for ac in self.ac_database:
-                                        if metadata_matches(props, ac.companies, ac.products):
-                                            self._append_task(
-                                                f"TASK FILE METADATA: {item.name} -> {p_clean} "
-                                                f"({props.get('CompanyName')})",
-                                            )
-                                            break
-                    except Exception as e:
-                        logger.debug("Failed to read task %s: %s", item.name, e)
-                except Exception as e:
+                        content = item.read_text(encoding="utf-16", errors="ignore")
+                    except (OSError, UnicodeError) as exc:
+                        self.fail_count += 1
+                        logger.debug("TaskChecker could not read %s: %s", item, format_error(exc))
+                        continue
+                    if not triggered:
+                        for target in self.target_names:
+                            if content_matches(content, [target]):
+                                self._append_task(
+                                    f"TASK CONTENT MATCH: {item.name} (contains {target})"
+                                )
+                                triggered = True
+                                break
+                    for match in _WINDOWS_PATH_PATTERN.finditer(content):
+                        path = match.group(0).strip()
+                        if not os.path.exists(path) or not path.lower().endswith((".exe", ".sys")):
+                            continue
+                        properties = get_file_properties(path)
+                        for ac in self.ac_database:
+                            if metadata_matches(properties, ac.companies, ac.products):
+                                self._append_task(
+                                    f"TASK FILE METADATA: {item.name} -> {path} "
+                                    f"({properties.get('CompanyName')})",
+                                    ac.name,
+                                )
+                                break
+                except OSError as exc:
                     self.fail_count += 1
-                    logger.error(
-                        "TaskChecker: unexpected error on %s: %s",
-                        item, e, exc_info=True,
-                    )
-                    continue
-        except Exception as e:
-            logger.error("%s failed", type(self).__name__, exc_info=True)
+                    logger.error("TaskChecker could not inspect %s: %s", item, format_error(exc))
+        except OSError as exc:
+            self.fail_count += 1
+            logger.error("TaskChecker could not scan %s: %s", directory, format_error(exc))
 
-    def _collect_prefetch_metadata(self, directory: Path) -> None:
+    def _collect_prefetch(self, directory: Path) -> None:
         try:
             for item in directory.glob("*.pf"):
-                fname = item.name.upper()
+                filename = item.name.casefold()
                 for target in self.target_names:
-                    t_clean = target.upper().replace(".EXE", "").replace(".SYS", "")
-                    if len(t_clean) < 4:
-                        continue
-                    if re.search(rf"\b{re.escape(t_clean)}\b", fname):
+                    normalized = target.casefold()
+                    for extension in (".exe", ".sys"):
+                        if normalized.endswith(extension):
+                            normalized = normalized[: -len(extension)]
+                            break
+                    if len(normalized) >= 3 and re.search(
+                        rf"\b{re.escape(normalized)}\b",
+                        filename,
+                    ):
                         self._append_task(f"PREFETCH HISTORY: {item.name}")
                         break
-        except Exception as e:
-            logger.debug("_collect_prefetch_metadata failed: %s", e)
+        except OSError as exc:
+            self.fail_count += 1
+            logger.error("Prefetch scan failed: %s", format_error(exc))

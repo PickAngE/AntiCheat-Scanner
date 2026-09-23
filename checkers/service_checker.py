@@ -1,83 +1,92 @@
-﻿import logging
-from typing import List, Optional
+from __future__ import annotations
+
+import logging
+from typing import Any, ClassVar
 
 import psutil
 
-from config.signatures import AntiCheatInfo
+from checkers.base import BaseChecker
+from checkers.detection import CATEGORY_SVC, Detection
+from checkers.matchers import content_matches, extract_exe_path, target_matches
 from config.sig_index import SignatureIndex
-
-from .base import BaseChecker
-from .detection import CATEGORY_SVC, Detection
-from .matchers import content_matches, extract_exe_path, target_matches
+from config.signatures import AntiCheatInfo
 from utils.attribution import resolve_ac_name
+from utils.subprocess_helper import format_error
 
 logger = logging.getLogger(__name__)
 
 
 class ServiceChecker(BaseChecker):
-    CATEGORY = CATEGORY_SVC
+    CATEGORY: ClassVar[str] = CATEGORY_SVC
 
     def __init__(
         self,
-        ac_database: List[AntiCheatInfo],
-        sig_index: Optional[SignatureIndex] = None,
+        ac_database: list[AntiCheatInfo],
+        sig_index: SignatureIndex | None = None,
     ) -> None:
         super().__init__(ac_database, sig_index)
-        self._all_sigs: List[str] = []
-        for ac in ac_database:
-            self._all_sigs.extend(ac.services + ac.processes + ac.drivers)
+        self._all_signatures = [
+            signature for ac in ac_database for signature in ac.services + ac.processes + ac.drivers
+        ]
 
     def check(self) -> None:
         try:
-            for service in psutil.win_service_iter():
-                try:
-                    svc_name = service.name()
-                    svc_display = service.display_name()
-                    raw_binpath = ""
-                    exe_path = ""
-
-                    found_match = target_matches(svc_name, self._all_sigs) or target_matches(
-                        svc_display, self._all_sigs
+            services = psutil.win_service_iter()
+        except (OSError, psutil.Error) as exc:
+            self.fail_count += 1
+            logger.error("Service enumeration failed: %s", format_error(exc))
+            return
+        for service in services:
+            try:
+                service_name = service.name()
+                display_name = service.display_name()
+                found_match = target_matches(service_name, self._all_signatures) or target_matches(
+                    display_name,
+                    self._all_signatures,
+                )
+                executable = ""
+                if not found_match:
+                    raw_binpath = service.binpath() or ""
+                    if raw_binpath:
+                        executable = extract_exe_path(raw_binpath)
+                        found_match = content_matches(
+                            executable,
+                            self._all_signatures,
+                        ) or target_matches(executable, self._all_signatures)
+                if not found_match:
+                    continue
+                service_data: dict[str, Any] = service.as_dict()
+                status = str(service_data.get("status", ""))
+                active = status.casefold() == "running"
+                label = display_name or service_name
+                ac_name = (
+                    resolve_ac_name(
+                        service_name,
+                        self.ac_database,
+                        self.sig_index,
                     )
-                    if not found_match:
-                        try:
-                            raw_binpath = service.binpath() or ""
-                            if raw_binpath:
-                                exe_path = extract_exe_path(raw_binpath)
-                                found_match = content_matches(
-                                    exe_path, self._all_sigs, min_length=4
-                                ) or target_matches(exe_path, self._all_sigs)
-                        except Exception as e:
-                            logger.debug("Service binpath check failed: %s", e)
-
-                    if not found_match:
-                        continue
-
-                    svc_dict = service.as_dict()
-                    status = svc_dict.get("status", "")
-                    active = status == "running"
-                    label = str(svc_display or svc_name or "")
-                    ac_name = resolve_ac_name(
-                        svc_name,
+                    or resolve_ac_name(
+                        display_name,
                         self.ac_database,
                         self.sig_index,
-                    ) or resolve_ac_name(
-                        svc_display,
-                        self.ac_database,
-                        self.sig_index,
-                    ) or (
-                        resolve_ac_name(exe_path, self.ac_database, self.sig_index)
-                        if exe_path
+                    )
+                    or (
+                        resolve_ac_name(executable, self.ac_database, self.sig_index)
+                        if executable
                         else None
                     )
-                    self.append_detection(Detection(
+                )
+                self.append_detection(
+                    Detection(
                         category=CATEGORY_SVC,
                         text=f"{label} {'[RUNNING]' if active else '[STOPPED]'}",
                         ac_name=ac_name,
                         active=active,
-                        raw=svc_dict,
-                    ))
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except Exception as e:
-            logger.error("%s failed", type(self).__name__, exc_info=True)
+                        raw=service_data,
+                    )
+                )
+            except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+                continue
+            except (OSError, TypeError, ValueError) as exc:
+                self.fail_count += 1
+                logger.debug("ServiceChecker could not inspect a service: %s", format_error(exc))

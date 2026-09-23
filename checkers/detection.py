@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 CATEGORY_SVC = "services"
 CATEGORY_PROC = "processes"
@@ -20,14 +22,14 @@ ALL_CATEGORIES = (
 )
 
 
-@dataclass
+@dataclass(slots=True)
 class Detection:
     category: str
     text: str
-    ac_name: Optional[str] = None
+    ac_name: str | None = None
     active: bool = False
     raw: Any = field(default=None, repr=False)
-    tech: Optional[Dict[str, Any]] = None
+    tech: dict[str, Any] | None = None
 
 
-CheckerResults = Dict[str, List[Detection]]
+CheckerResults = dict[str, list[Detection]]

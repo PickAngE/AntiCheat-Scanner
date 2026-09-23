@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 import logging
-from typing import Dict, List, Optional
+from collections.abc import Iterable, Sequence
 
 from config.signatures import AntiCheatInfo
 
@@ -10,55 +12,62 @@ class SignatureIndex:
     __slots__ = ("_index",)
 
     def __init__(self) -> None:
-        self._index: Dict[str, str] = {}
+        self._index: dict[str, dict[str, set[str]]] = {}
 
     @classmethod
-    def build(cls, ac_database: List[AntiCheatInfo]) -> "SignatureIndex":
+    def build(cls, ac_database: Sequence[AntiCheatInfo]) -> SignatureIndex:
         instance = cls()
         for ac in ac_database:
-            for sig in ac.services + ac.processes + ac.drivers:
-                key = cls._normalize(sig)
-                if not key:
-                    continue
-                existing = instance._index.get(key)
-                if existing and existing != ac.name:
-                    logger.warning(
-                        "Signature collision for %r: %s vs %s (keeping %s)",
-                        key,
-                        existing,
-                        ac.name,
-                        existing,
-                    )
-                    continue
-                instance._index[key] = ac.name
+            for kind, signatures in (
+                ("services", ac.services),
+                ("processes", ac.processes),
+                ("drivers", ac.drivers),
+            ):
+                for signature in signatures:
+                    key = cls._normalize(signature)
+                    if not key:
+                        continue
+                    products = instance._index.setdefault(key, {}).setdefault(kind, set())
+                    if products and ac.name not in products:
+                        logger.warning(
+                            "Signature collision for %r between %s and %s",
+                            key,
+                            ", ".join(sorted(products)),
+                            ac.name,
+                        )
+                    products.add(ac.name)
         return instance
 
-    def lookup(self, text: str) -> Optional[str]:
+    def lookup(self, text: str, kinds: Iterable[str] | None = None) -> str | None:
         if not text:
             return None
-
-        key_full = self._normalize(text)
-        result = self._index.get(key_full)
-        if result:
-            return result
-
-        basename = text.rsplit("\\", 1)[-1] if "\\" in text else None
-        if basename:
-            key_base = self._normalize(basename)
-            result = self._index.get(key_base)
-            if result:
-                return result
-
+        normalized_text = text.replace("/", "\\")
+        keys: tuple[str, ...] = (self._normalize(normalized_text),)
+        basename = normalized_text.rsplit("\\", 1)[-1]
+        if basename != normalized_text:
+            keys += (self._normalize(basename),)
+        allowed = set(kinds) if kinds is not None else None
+        for key in keys:
+            products_by_kind = self._index.get(key)
+            if not products_by_kind:
+                continue
+            products = {
+                product
+                for kind, values in products_by_kind.items()
+                if allowed is None or kind in allowed
+                for product in values
+            }
+            if products:
+                return sorted(products)[0]
         return None
 
     @staticmethod
-    def _normalize(sig: str) -> str:
-        s = sig.strip().lower()
-        for ext in (".exe", ".sys", ".dll"):
-            if s.endswith(ext):
-                s = s[: -len(ext)]
-                break
-        return s
+    def _normalize(signature: str) -> str:
+        normalized = signature.strip().lower().replace("/", "\\")
+        for extension in (".exe", ".sys", ".dll"):
+            if normalized.endswith(extension):
+                return normalized[: -len(extension)]
+        return normalized
 
     def __len__(self) -> int:
         return len(self._index)

@@ -1,127 +1,152 @@
 # Anti-Cheat Scanner
 
-A Windows forensic utility that detects the presence, configuration, and execution traces of anti-cheat software through multi-layer system analysis.
+Anti-Cheat Scanner is a Windows utility for identifying anti-cheat software, related files, services, drivers, registry entries, and execution traces on a local machine.
 
-## Supported Targets
+## Supported targets
 
-- ACE (AntiCheatExpert)
-- EA Anti-Cheat / Javelin
-- EAC (EasyAntiCheat)
+- ACE / AntiCheatExpert
+- EA Javelin / EA Anti-Cheat
+- Easy Anti-Cheat
 - BattlEye
-- HoYoProtect (mhyprot)
+- HoYoProtect
 
-## Detection Methods
+## Detection areas
 
-The scanner collects evidence across the following subsystems:
+### Runtime
 
-**Kernel & Drivers**
-- Minifilter driver enumeration via Windows Filter Manager (`fltmc`)
-- Loaded kernel module listing via DriverQuery
-- WMI system driver cross-reference against vendor signatures
+- Running processes
+- Windows services
+- Loaded filter drivers
+- DriverQuery entries
+- Network connections and named pipes
 
-**Processes & Services**
-- Service Control Manager (SCM) database query for registered anti-cheat services
-- Active process analysis with signature matching, fuzzy matching, and metadata fallback
+### Files and binaries
 
-**File System & Binary Forensics**
-- Authenticode digital signature verification (batched via PowerShell)
-- PE metadata extraction (CompanyName, ProductName, etc.)
-- SHA256 hashing for binary identification
+- Known anti-cheat folders
+- File metadata
+- SHA-256 hashes
+- Authenticode signer subjects
+- Scheduled tasks
+- Prefetch filename indicators
 
-**Execution Artifacts**
-- BAM (Background Activity Moderator) per-user SID analysis
-- AppCompatFlags execution history (Compatibility Assistant)
-- Shell MuiCache scan
-- Prefetch file parsing
+### Windows artifacts
 
-**Registry Forensics**
-- Installation keys and persistence mechanism analysis
-- WOW6432Node cross-architecture scanning
-- App Paths and Uninstall key inspection
-
-**Network & IPC**
-- Named pipe namespace scan (`\\.\pipe\`)
-- DNS resolver cache inspection
-- Active connection enumeration via `netstat`
-
-**System Configuration**
-- BCD (Boot Configuration Data) boot entry and kernel flag checks
-- Scheduled task enumeration
-- Windows Defender exclusion and Firewall rule review
+- Installed services and registry keys
+- Uninstall entries
+- Application Paths
+- Startup entries
+- MuiCache
+- AppCompat history
+- BAM execution records
+- Defender exclusions
+- Firewall rules
+- DNS cache
+- Event log indicators
+- Boot configuration text
 
 ## Architecture
 
-All detection subsystems inherit from a common `BaseChecker` interface and return standardized `Detection` dataclass objects. An optimized O(1) signature index is used for high-volume matching. Checkers are registered in `checkers/registry.py` and run in parallel via `ThreadPoolExecutor`.
+The scanner uses a common `BaseChecker` interface and a normalized `Detection` object. Checkers are created by `checkers.registry` and can run concurrently. Signature data is loaded from `config/signatures.json` and indexed for exact-name lookups.
 
-| Checker | Coverage |
-|---|---|
-| `ServiceChecker` | SCM-registered anti-cheat services |
-| `ProcessChecker` | Running processes and executable metadata |
-| `DriverFileChecker` | Kernel-mode driver files |
-| `FileChecker` | Filesystem binary artifacts |
-| `RegistryChecker` | Registry keys and values |
-| `TaskChecker` | Scheduled tasks |
-| `TraceChecker` | Execution artifacts (BAM, Prefetch, MUICache, etc.) |
+The scanner distinguishes evidence from runtime state. A driver file found on disk is reported as present evidence, while loaded-driver evidence is collected separately by runtime checks. Runtime process detection relies on exact executable or service names; fuzzy name similarity is not used as standalone evidence.
 
 ## Requirements
 
-- Windows 11 (x64)
-- Python 3.10+
-- Administrator privileges (recommended for full coverage)
-
-## Dependencies
-
-| Package | Version |
-|---|---|
-| `psutil` | >=5.9, <7 |
-| `pywin32` | >=306, <400 |
-| `rapidfuzz` | >=3.0, <4 |
+- Windows 10 or Windows 11
+- Python 3.10 or newer
+- Administrator privileges for complete coverage
+- `pywin32` and `psutil`
 
 ## Installation
 
 ```powershell
 git clone https://github.com/PickAngE/Anti-Cheat-Scanner.git
 cd Anti-Cheat-Scanner
-pip install -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+For development tools:
+
+```powershell
+python -m pip install -r requirements-dev.txt
 ```
 
 ## Usage
+
+A direct interactive launch waits before closing. Use `--no-pause` for automation. The Windows PowerShell launcher uses the local virtual environment and keeps the console available for diagnostics:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\run_scanner.ps1
+```
+
+You can also run the CLI directly from an activated environment:
 
 ```powershell
 python main.py
 ```
 
-The script automatically requests elevation via UAC. If elevation is denied, the script exits.
-
-The script automatically requests elevation via UAC. If elevation is denied, the script exits.
-
-## Usage
+The default report is written to the project directory. Use `--output-dir` to select another directory.
 
 ```powershell
-python main.py
+python main.py --output-dir C:\Reports --json
 ```
 
+Available options:
 
+```text
+--json              Write a JSON report
+--workers N         Number of concurrent checkers
+--max-depth N       Maximum filesystem search depth
+--full              Scan configured roots recursively
+--output-dir PATH   Report destination
+--pause             Wait for Enter before exiting
+--no-pause          Exit without waiting for Enter
+--strict            Return non-zero for a partial scan
+```
 
-### Output
+The scanner requests elevation through UAC when needed. A denied elevation or a failed elevated scan returns a non-zero exit code.
 
-Results are written to an `AntiCheat_Report_<timestamp>.txt` file in the current working directory (preserved after UAC elevation), including detected software, matched signatures, and subsystem findings. With `--json`, a machine-readable `.json` report is also generated with the same data structured by anti-cheat product and category.
+## Reports
 
-## Technical Notes
+Text reports contain the detected artifacts grouped by anti-cheat and subsystem. JSON reports contain the same findings with checker statistics, scan duration, and a `complete` or `partial` scan status.
 
-- **Automatic privilege elevation**: Requests Administrator privileges via UAC when detected as non-admin, with a silent fallback to limited coverage if denied.
-- **Standardized detection format**: All checkers return `Detection` dataclass objects with uniform fields (`category`, `text`, `ac_name`, `active`, `raw`, `tech`), consumed by a single report builder.
-- **Parallel execution**: Checkers run concurrently via `ThreadPoolExecutor` (configurable with `--workers`).
-- **Multi-layer matching**: Exact signature match through O(1) index, fuzzy name matching via rapidfuzz, and metadata-based detection (CompanyName, ProductName, digital certificate subject).
-- **External signature database**: Anti-cheat signatures are loaded from `config/signatures.json`.
-- **Optimized signature indexing**: Builds an O(1) lookup index from the signature database for high-volume string matching across all subsystems.
-- **Batched Authenticode verification**: Digital signatures are verified in bounded PowerShell batches to minimize process overhead and command length.
-- **Segment-based path matching**: Filesystem scans use folder segment matching to reduce false positives.
+A partial status means that at least one checker reported inaccessible data, unavailable commands, or other item-level failures. Treat partial results as triage evidence rather than a complete forensic conclusion. Use `--strict` when a partial scan must produce a non-zero exit code.
 
-## Disclaimer
+Reports can contain user paths, process names, registry values, hashes, and signer information. Store them accordingly.
 
-This tool is intended for forensic analysis, system auditing, and educational purposes only. Detection results are based on heuristic indicators and historical artifacts; they may contain false positives or miss obfuscated or unknown anti-cheat implementations. Always cross-validate findings with additional forensic tools.
+## Configuration
+
+`config/signatures.json` contains the maintained detection database. The database is intentionally focused on anti-cheat-specific components rather than general game or publisher artifacts.
+
+`config/whitelist.json` can suppress selected files, processes, services, or folders. Whitelisted items are counted in checker statistics but are not included as findings.
+
+## Limitations
+
+- Heuristic matching can produce false positives or false negatives.
+- Metadata and signer-subject matching do not prove that a binary is trusted.
+- Prefetch filenames are indicators only and are not fully parsed.
+- BCD and firewall checks use targeted text inspection.
+- The default filesystem search is shallow and does not cover every custom installation path.
+- Results should be correlated with independent forensic sources.
+
+## Project conventions
+
+All project-authored source, logs, documentation, configuration, and launcher text are in English. Operating-system messages may use the language configured in Windows. Python source files and tests contain no comments or docstrings.
+
+## Development checks
+
+```powershell
+python -m pytest -q
+python -m ruff check .
+python -m mypy .
+```
+
+## Security
+
+Run the scanner from a trusted project directory. The application elevates a local Python process and should not be launched from an untrusted download or shared writable directory. Reports may contain sensitive system metadata.
 
 ## License
 
-Proprietary. See [LICENSE](LICENSE) for full terms.
+Proprietary. See [LICENSE](LICENSE) for the complete terms.

@@ -1,7 +1,9 @@
-﻿import json
+from __future__ import annotations
+
+import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from checkers.detection import (
     CATEGORY_DRV,
@@ -14,46 +16,51 @@ from checkers.detection import (
     CheckerResults,
     Detection,
 )
-from config.signatures import AntiCheatInfo
+from checkers.matchers import target_matches
 from config.sig_index import SignatureIndex
-from utils.logger import logger
+from config.signatures import AntiCheatInfo
 from utils.attribution import resolve_ac_from_folder, resolve_ac_from_registry, resolve_ac_name
 from utils.helpers import batch_get_digital_signatures, get_file_hash, get_file_properties
-from checkers.matchers import target_matches
+from utils.logger import logger
 
 
-def _driver_fs_path(path: str) -> Optional[str]:
+def _driver_fs_path(path: str) -> str | None:
     if os.path.exists(path):
         return path
     for prefix in ("DRIVER METADATA:", "DRIVER CERT:"):
         if path.startswith(prefix):
-            remainder = path[len(prefix):].strip()
-            candidate = remainder.split(" (", 1)[0].strip()
+            candidate = path[len(prefix) :].split(" (", 1)[0].strip()
             if os.path.exists(candidate):
                 return candidate
     return None
 
 
-def _build_tech_from_detection(det: Detection) -> Optional[Dict[str, Any]]:
-    if det.tech:
-        return det.tech
-    if det.raw and isinstance(det.raw, dict):
+def _build_tech_from_detection(detection: Detection) -> dict[str, Any] | None:
+    if detection.tech:
+        return detection.tech
+    if isinstance(detection.raw, dict):
         return {
-            "name": det.raw.get("name", det.text),
-            "path": det.raw.get("exe", ""),
+            "name": detection.raw.get("name", detection.text),
+            "path": detection.raw.get("exe", ""),
         }
     return None
 
 
 def build_found_map(
-    ac_database: List[AntiCheatInfo],
+    ac_database: list[AntiCheatInfo],
     checker_results: CheckerResults,
-    sig_index: Optional[SignatureIndex] = None,
-) -> Dict[str, Any]:
-    found_map: Dict[str, Any] = {}
-    tech_info: List[Dict[str, Any]] = []
+    sig_index: SignatureIndex | None = None,
+) -> dict[str, Any]:
+    found_map: dict[str, Any] = {}
+    technical_info: list[dict[str, Any]] = []
 
-    def _add(ac_name: Optional[str], category: str, desc: str, active: bool = False, tech: Optional[Dict[str, Any]] = None) -> None:
+    def add(
+        ac_name: str | None,
+        category: str,
+        description: str,
+        active: bool = False,
+        tech: dict[str, Any] | None = None,
+    ) -> None:
         target = ac_name or "(unattributed)"
         entry = found_map.setdefault(
             target,
@@ -68,58 +75,85 @@ def build_found_map(
                 CATEGORY_TRACE: set(),
             },
         )
-        entry[category].add(desc)
+        entry[category].add(description)
         if active:
             entry["running"] = True
         if tech:
             tech["ac"] = target
-            tech_info.append(tech)
+            technical_info.append(tech)
 
-    for det in checker_results.get(CATEGORY_SVC, []):
-        raw = det.raw or {}
-        svc_name = str(raw.get("name") or "")
-        svc_display = str(raw.get("display_name") or "")
-        ac_name = det.ac_name or resolve_ac_name(
-            svc_name, ac_database, sig_index,
-        ) or resolve_ac_name(
-            svc_display, ac_database, sig_index,
+    for detection in checker_results.get(CATEGORY_SVC, []):
+        raw = detection.raw if isinstance(detection.raw, dict) else {}
+        service_name = str(raw.get("name", ""))
+        display_name = str(raw.get("display_name", ""))
+        ac_name = (
+            detection.ac_name
+            or resolve_ac_name(service_name, ac_database, sig_index)
+            or resolve_ac_name(
+                display_name,
+                ac_database,
+                sig_index,
+            )
         )
-        _add(ac_name, CATEGORY_SVC, det.text, det.active)
+        add(ac_name, CATEGORY_SVC, detection.text, detection.active)
 
-    for det in checker_results.get(CATEGORY_PROC, []):
-        raw = det.raw or {}
-        ac_name = det.ac_name or resolve_ac_name(
-            str(raw.get("name", "")), ac_database, sig_index, include_drivers=False,
-        ) or resolve_ac_name(
-            str(raw.get("exe", "")), ac_database, sig_index, include_drivers=False,
+    for detection in checker_results.get(CATEGORY_PROC, []):
+        raw = detection.raw if isinstance(detection.raw, dict) else {}
+        ac_name = (
+            detection.ac_name
+            or resolve_ac_name(
+                str(raw.get("name", "")),
+                ac_database,
+                sig_index,
+                include_drivers=False,
+            )
+            or resolve_ac_name(
+                str(raw.get("exe", "")),
+                ac_database,
+                sig_index,
+                include_drivers=False,
+            )
         )
-        _add(ac_name, CATEGORY_PROC, det.text, True, _build_tech_from_detection(det))
+        add(ac_name, CATEGORY_PROC, detection.text, True, _build_tech_from_detection(detection))
 
-    for det in checker_results.get(CATEGORY_FOLDER, []):
-        path = det.text
-        ac_name = det.ac_name or resolve_ac_from_folder(path, ac_database)
+    for detection in checker_results.get(CATEGORY_FOLDER, []):
+        path = detection.text
+        ac_name = detection.ac_name or resolve_ac_from_folder(path, ac_database)
         if not ac_name:
             for ac in ac_database:
                 if target_matches(path, ac.folders):
                     ac_name = ac.name
                     break
-        _add(ac_name, CATEGORY_FOLDER, path)
+        add(ac_name, CATEGORY_FOLDER, path)
 
-    for det in checker_results.get(CATEGORY_REG, []):
-        ac_name = det.ac_name or resolve_ac_from_registry(det.text, ac_database, sig_index)
-        _add(ac_name, CATEGORY_REG, det.text)
+    for detection in checker_results.get(CATEGORY_REG, []):
+        ac_name = detection.ac_name or resolve_ac_from_registry(
+            detection.text, ac_database, sig_index
+        )
+        add(ac_name, CATEGORY_REG, detection.text)
 
     driver_detections = checker_results.get(CATEGORY_DRV, [])
-    driver_fs_paths = [
+    driver_paths = [
         fs_path
-        for det in driver_detections
-        if (fs_path := _driver_fs_path(det.raw if isinstance(det.raw, str) else det.text)) is not None
+        for detection in driver_detections
+        if (
+            fs_path := _driver_fs_path(
+                detection.raw if isinstance(detection.raw, str) else detection.text
+            )
+        )
+        is not None
     ]
-    driver_signatures = batch_get_digital_signatures(driver_fs_paths)
-
-    for det in driver_detections:
-        path = det.raw if isinstance(det.raw, str) else det.text
-        ac_name = det.ac_name or resolve_ac_name(path, ac_database, sig_index, include_processes=False)
+    driver_signatures = batch_get_digital_signatures(driver_paths)
+    for detection in driver_detections:
+        path = detection.raw if isinstance(detection.raw, str) else detection.text
+        ac_name = detection.ac_name or resolve_ac_name(
+            path,
+            ac_database,
+            sig_index,
+            include_processes=False,
+            include_products=True,
+            include_name=True,
+        )
         fs_path = _driver_fs_path(path)
         tech = None
         if fs_path:
@@ -129,18 +163,19 @@ def build_found_map(
                 "sha": get_file_hash(fs_path),
                 "sig": driver_signatures.get(fs_path, ""),
                 "meta": get_file_properties(fs_path),
+                "state": "running" if detection.active else "present",
             }
-        _add(ac_name, CATEGORY_DRV, det.text, det.active, tech)
+        add(ac_name, CATEGORY_DRV, detection.text, detection.active, tech)
 
-    for det in checker_results.get(CATEGORY_TRACE, []):
-        ac_name = det.ac_name or resolve_ac_name(det.text, ac_database, sig_index)
-        _add(ac_name, CATEGORY_TRACE, det.text, det.active)
+    for detection in checker_results.get(CATEGORY_TRACE, []):
+        ac_name = detection.ac_name or resolve_ac_name(detection.text, ac_database, sig_index)
+        add(ac_name, CATEGORY_TRACE, detection.text, detection.active)
 
-    for det in checker_results.get(CATEGORY_TASK, []):
-        ac_name = det.ac_name or resolve_ac_name(det.text, ac_database, sig_index)
-        _add(ac_name, CATEGORY_TASK, det.text)
+    for detection in checker_results.get(CATEGORY_TASK, []):
+        ac_name = detection.ac_name or resolve_ac_name(detection.text, ac_database, sig_index)
+        add(ac_name, CATEGORY_TASK, detection.text)
 
-    return {"found_map": found_map, "technical_info": tech_info}
+    return {"found_map": found_map, "technical_info": technical_info}
 
 
 _CATEGORY_LABELS = {
@@ -152,7 +187,7 @@ _CATEGORY_LABELS = {
     CATEGORY_TASK: "Scheduled Tasks / Prefetch",
     CATEGORY_TRACE: "Forensic Traces",
 }
-_CATEGORY_ORDER = [
+_CATEGORY_ORDER = (
     CATEGORY_PROC,
     CATEGORY_SVC,
     CATEGORY_DRV,
@@ -160,84 +195,82 @@ _CATEGORY_ORDER = [
     CATEGORY_FOLDER,
     CATEGORY_TASK,
     CATEGORY_TRACE,
-]
+)
 
 
-def count_unique_detections(found_map: Dict[str, Any]) -> int:
-    total = 0
-    for data in found_map.values():
-        for cat in _CATEGORY_ORDER:
-            total += len(data.get(cat, set()))
-    return total
+def count_unique_detections(found_map: dict[str, Any]) -> int:
+    return sum(
+        len(data.get(category, set()))
+        for data in found_map.values()
+        for category in _CATEGORY_ORDER
+    )
 
 
-def write_report(data_package: Dict[str, Any], total_found: int) -> None:
+def write_report(data_package: dict[str, Any], total_found: int) -> None:
     found_map = data_package["found_map"]
-    tech_info = data_package["technical_info"]
-
+    technical_info = data_package["technical_info"]
     logger.log("\n" + "=" * 60)
     logger.log(" ANTI-CHEAT REPORT ".center(60))
     logger.log("=" * 60)
-    logger.log(f" [+] Unique detections found: {total_found}\n")
-
+    logger.log(f" [+] Detection records: {total_found}")
+    logger.log(f" [+] Scan status: {data_package.get('scan_status', 'unknown')}")
+    logger.log(f" [+] Duration: {data_package.get('duration_seconds', 'unknown')} seconds\n")
     if not found_map:
         logger.log(" [!] No anti-cheat traces detected.\n")
     else:
-        sorted_acs = sorted(found_map.items(), key=lambda x: x[1]["running"], reverse=True)
-        for ac_name, data in sorted_acs:
-            status = "[ACTIVE]" if data["running"] else "[TRACES]"
-            logger.log(f" * {ac_name} {status}")
-            has_any = False
-            for cat in _CATEGORY_ORDER:
-                items = data.get(cat, set())
+        for ac_name, data in sorted(
+            found_map.items(), key=lambda item: item[1]["running"], reverse=True
+        ):
+            logger.log(f" * {ac_name} {'[ACTIVE]' if data['running'] else '[TRACES]'}")
+            for category in _CATEGORY_ORDER:
+                items = data.get(category, set())
                 if not items:
                     continue
-                has_any = True
-                label = _CATEGORY_LABELS.get(cat, cat)
-                logger.log(f"    [{label}]")
+                logger.log(f"    [{_CATEGORY_LABELS[category]}]")
                 for item in sorted(items):
                     logger.log(f"      - {item}")
-            if has_any:
-                logger.log("")
-
-    if tech_info:
+            logger.log("")
+    if technical_info:
         logger.log("-" * 60)
-        logger.log(" CURRENTLY RUNNING ".center(60))
+        logger.log(" BINARY DETAILS ".center(60))
         logger.log("-" * 60)
-        for info in tech_info:
+        for info in technical_info:
             logger.log(f" [{info['ac']}] {info['name']}:")
+            if info.get("state"):
+                logger.log(f"   State: {info['state']}")
             if info.get("path"):
                 logger.log(f"   Path: {info['path']}")
             if info.get("sha"):
                 logger.log(f"   SHA256: {info['sha']}")
             if info.get("sig"):
                 logger.log(f"   Signer: {info['sig']}")
-            meta = info.get("meta", {})
-            if meta and meta.get("CompanyName"):
-                logger.log(f"   Company: {meta['CompanyName']}")
+            metadata = info.get("meta", {})
+            if metadata.get("CompanyName"):
+                logger.log(f"   Company: {metadata['CompanyName']}")
             logger.log("")
-
     logger.log("=" * 60)
     logger.log(" SCAN COMPLETE ".center(60))
     logger.log("=" * 60 + "\n")
 
 
-def _serialize_found_map(found_map: Dict[str, Any]) -> Dict[str, Any]:
-    serialized: Dict[str, Any] = {}
+def _serialize_found_map(found_map: dict[str, Any]) -> dict[str, Any]:
+    serialized: dict[str, Any] = {}
     for ac_name, data in found_map.items():
-        serialized[ac_name] = {
-            "running": data.get("running", False),
-        }
-        for cat in _CATEGORY_ORDER:
-            items = data.get(cat, set())
+        entry: dict[str, Any] = {"running": data.get("running", False)}
+        for category in _CATEGORY_ORDER:
+            items = data.get(category, set())
             if items:
-                serialized[ac_name][cat] = sorted(items)
+                entry[category] = sorted(items)
+        serialized[ac_name] = entry
     return serialized
 
 
-def write_json_report(data_package: Dict[str, Any], total_found: int, output_path: Path) -> None:
+def write_json_report(data_package: dict[str, Any], total_found: int, output_path: Path) -> None:
     payload = {
         "total_detections": total_found,
+        "scan_status": data_package.get("scan_status", "unknown"),
+        "duration_seconds": data_package.get("duration_seconds"),
+        "checker_stats": data_package.get("checker_stats", {}),
         "anti_cheats": _serialize_found_map(data_package["found_map"]),
         "technical_info": data_package.get("technical_info", []),
     }
