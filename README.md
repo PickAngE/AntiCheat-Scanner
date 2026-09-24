@@ -131,8 +131,9 @@ All project-authored source, logs, documentation, configuration, and launcher te
 
 ## Development checks
 
+The repository does not include a test suite. Run the static quality checks with:
+
 ```powershell
-python -m pytest -q
 python -m ruff check .
 python -m mypy .
 ```
