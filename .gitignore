@@ -16,6 +16,7 @@ dist/
 *.egg-info/
 
 # Tests and static analysis
+/tests/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
