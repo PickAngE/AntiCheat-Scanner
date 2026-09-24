@@ -72,6 +72,7 @@ id_ecdsa*
 id_ed25519*
 
 # Local historical files
+/run_scanner.*
 /PushGithub.bat*
 /query
 
