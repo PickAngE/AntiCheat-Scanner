@@ -75,16 +75,10 @@ python -m pip install -r requirements-dev.txt
 
 ## Usage
 
-A direct interactive launch waits before closing. Use `--no-pause` for automation. The Windows PowerShell launcher uses the local virtual environment and keeps the console available for diagnostics:
+A direct interactive launch waits before closing. Use `--no-pause` for automation. Run the CLI directly from the project environment:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\run_scanner.ps1
-```
-
-You can also run the CLI directly from an activated environment:
-
-```powershell
-python main.py
+.\.venv\Scripts\python.exe .\main.py
 ```
 
 The default report is written to the project directory. Use `--output-dir` to select another directory.
