@@ -67,12 +67,6 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-For development tools:
-
-```powershell
-python -m pip install -r requirements-dev.txt
-```
-
 ## Usage
 
 A direct interactive launch waits before closing. Use `--no-pause` for automation. Run the CLI directly from the project environment:
@@ -124,19 +118,6 @@ Reports can contain user paths, process names, registry values, hashes, and sign
 - BCD and firewall checks use targeted text inspection.
 - The default filesystem search is shallow and does not cover every custom installation path.
 - Results should be correlated with independent forensic sources.
-
-## Project conventions
-
-All project-authored source, logs, documentation, configuration, and launcher text are in English. Operating-system messages may use the language configured in Windows. Python source files and tests contain no comments or docstrings.
-
-## Development checks
-
-The repository does not include a test suite. Run the static quality checks with:
-
-```powershell
-python -m ruff check .
-python -m mypy .
-```
 
 ## Security
 

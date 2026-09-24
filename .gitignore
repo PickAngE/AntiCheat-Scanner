@@ -15,8 +15,15 @@ build/
 dist/
 *.egg-info/
 
-# Tests and static analysis
+# Local development files
 /tests/
+/requirements-dev.txt
+/mypy.ini
+/pytest.ini
+/pyproject.toml
+/.github/
+
+# Tests and static analysis
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
