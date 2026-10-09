@@ -1,0 +1,41 @@
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [".venv", ".mypy_cache", ".pytest_cache", ".ruff_cache"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+# Centralized mirrors only: mypy.ini and pytest.ini remain the reference.
+[tool.pytest.ini_options]
+pythonpath = ["."]
+addopts = "-ra"
+
+[tool.mypy]
+strict = true
+explicit_package_bases = true
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "anti-cheat-scanner"
+version = "0.2.0"
+description = "Windows utility for identifying anti-cheat software and related traces"
+requires-python = ">=3.10"
+dependencies = [
+  "psutil>=5.9.0,<7",
+  "pywin32>=306,<400; sys_platform=='win32'",
+]
+
+[project.scripts]
+anti-cheat-scanner = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["checkers*", "config*", "utils*"]

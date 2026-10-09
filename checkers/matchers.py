@@ -1,7 +1,9 @@
+
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from functools import lru_cache
 
 WINDOWS_WHITELIST = frozenset(
     {
@@ -47,15 +49,64 @@ WINDOWS_WHITELIST = frozenset(
 _EXTENSIONS = (".exe", ".sys", ".dll")
 _MINIMUM_SIGNATURE_LENGTH = 3
 _WORD_BOUNDARY = re.compile(r"[^a-z0-9]+")
-_EXTENSION_PATTERN = re.compile(r"(\.exe|\.sys|\.dll)", re.IGNORECASE)
+_EXTENSION_PATTERN = re.compile(r"(\.exe|\.sys|\.dll)\b", re.IGNORECASE)
+_ALNUM_PATTERN = re.compile(r"[^a-z0-9]+")
+
+
+def strip_binary_suffix(value: str) -> str:
+    normalized = value.strip()
+    lowered = normalized.lower()
+    changed = True
+    while changed:
+        changed = False
+        for extension in _EXTENSIONS:
+            if lowered.endswith(extension):
+                normalized = normalized[: -len(extension)]
+                lowered = lowered[: -len(extension)]
+                changed = True
+                break
+    return normalized
 
 
 def _strip_extensions(value: str) -> str:
-    normalized = value.lower()
-    for extension in _EXTENSIONS:
-        if normalized.endswith(extension):
-            return normalized[: -len(extension)]
-    return normalized
+    return strip_binary_suffix(value).lower()
+
+
+def normalize_alnum(value: str) -> str:
+    return _ALNUM_PATTERN.sub("", value.lower())
+
+
+def is_windows_system_file(basename: str, dirpath: str = "", *, strict_dirs: bool = False) -> bool:
+    if basename.casefold() not in WINDOWS_WHITELIST:
+        return False
+    if not strict_dirs or not dirpath:
+        return True
+    normalized = dirpath.replace("/", "\\").lower().rstrip("\\")
+    return (
+        "\\windows\\system32" in normalized
+        or normalized.endswith("\\windows\\system")
+        or "\\windows\\syswow64" in normalized
+    )
+
+
+@lru_cache(maxsize=512)
+def _word_pattern(normalized: str) -> re.Pattern[str]:
+    return re.compile(rf"\b{re.escape(normalized)}\b")
+
+
+def compile_combined_pattern(targets: Sequence[str]) -> re.Pattern[str]:
+    clean_targets = list(
+        dict.fromkeys(
+            _strip_extensions(target.strip())
+            for target in targets
+            if target and target.strip()
+        )
+    )
+    clean_targets = [target for target in clean_targets if len(target) >= 3]
+    if not clean_targets:
+        return re.compile(r"(?!)")
+    alternatives = "|".join(re.escape(target) for target in clean_targets)
+    return re.compile(rf"(?<![a-z0-9])(?:{alternatives})(?![a-z0-9])", re.IGNORECASE)
 
 
 def extract_exe_path(binpath: str) -> str:
@@ -85,7 +136,7 @@ def content_matches(
         normalized = _strip_extensions(target.strip())
         if len(normalized) < min_length:
             continue
-        if re.search(rf"\b{re.escape(normalized)}\b", text_lower):
+        if _word_pattern(normalized).search(text_lower):
             return True
     return False
 
@@ -106,12 +157,16 @@ def folder_name_matches_target(folder_name: str, targets: Sequence[str]) -> bool
     return False
 
 
-def target_matches(text: str, targets: Sequence[str]) -> bool:
+def target_matches(
+    text: str,
+    targets: Sequence[str],
+    strict_system_dirs: bool = False,
+) -> bool:
     if not text:
         return False
     text_lower = text.lower()
     basename = text_lower.replace("/", "\\").rsplit("\\", 1)[-1]
-    if basename in WINDOWS_WHITELIST:
+    if is_windows_system_file(basename, text_lower, strict_dirs=strict_system_dirs):
         return False
     for target in targets:
         if not target:
@@ -129,7 +184,7 @@ def target_matches(text: str, targets: Sequence[str]) -> bool:
         if normalized == basename or name_base == target_base:
             return True
         normalized_name = _WORD_BOUNDARY.sub(" ", name_base)
-        if re.search(rf"\b{re.escape(target_base)}\b", normalized_name):
+        if _word_pattern(target_base).search(normalized_name):
             return True
     return False
 
@@ -174,14 +229,20 @@ def _phrase_matches(text: str, target: str) -> bool:
     return bool(re.search(rf"(?<![a-z0-9]){re.escape(normalized)}(?![a-z0-9])", text))
 
 
+def _is_microsoft_company(company: str) -> bool:
+
+
+    return company == "microsoft" or company.startswith("microsoft ")
+
+
 def metadata_matches(
     properties: dict[str, object], target_companies: Sequence[str], target_products: Sequence[str]
 ) -> bool:
     if not properties:
         return False
-    company = str(properties.get("CompanyName", "")).lower()
-    product = str(properties.get("ProductName", "")).lower()
-    if "microsoft" in company:
+    company = str(properties.get("CompanyName") or "").lower()
+    product = str(properties.get("ProductName") or "").lower()
+    if _is_microsoft_company(company):
         return False
     if company and any(_phrase_matches(company, target) for target in target_companies):
         return True

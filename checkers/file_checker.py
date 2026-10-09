@@ -10,6 +10,7 @@ from checkers.detection import CATEGORY_FOLDER, Detection
 from checkers.matchers import folder_name_matches_target, metadata_matches
 from config.sig_index import SignatureIndex
 from config.signatures import AntiCheatInfo
+from utils.attribution import resolve_ac_from_folder
 from utils.helpers import get_drives, get_file_properties
 from utils.subprocess_helper import format_error
 
@@ -33,12 +34,22 @@ COMMON_ROOTS = (
     "Temp",
     r"AppData\Local\Temp",
     r"Windows\Temp",
-    r"Windows\Prefetch",
+
+
+
 )
 
+
+
+
+_METADATA_EXTENSIONS = frozenset({".exe", ".sys", ".dll"})
 _USER_RELATIVE_ROOTS = frozenset(
     {"Downloads", "Desktop", "Documents", "Temp", r"AppData\Local\Temp"}
 )
+
+
+
+
 _SKIP_DIRS = frozenset(
     {
         "System Volume Information",
@@ -48,11 +59,12 @@ _SKIP_DIRS = frozenset(
         "servicing",
         "node_modules",
         "INetCache",
-        "Temp",
         "OneDrive",
         "NTUSER.DAT",
     }
 )
+
+_SKIP_DIRS_LOWER = frozenset(entry.lower() for entry in _SKIP_DIRS)
 _METADATA_SCAN_ROOTS = frozenset(
     {"Downloads", "Desktop", "Documents", "Temp", r"AppData\Local\Temp"}
 )
@@ -83,6 +95,27 @@ class FileChecker(BaseChecker):
                 path = Path(path_string)
                 if path.exists():
                     self.append_detection(Detection(category=CATEGORY_FOLDER, text=str(path)))
+                else:
+
+
+
+
+                    try:
+                        os.stat(path_string)
+                    except FileNotFoundError:
+                        continue
+                    except OSError as stat_exc:
+                        self.skipped_count += 1
+                        logger.debug(
+                            "FileChecker skipped inaccessible %s: %s",
+                            path_string,
+                            format_error(stat_exc),
+                        )
+                    else:
+
+
+                        self.skipped_count += 1
+                        logger.debug("FileChecker skipped unstable path %s", path_string)
             except OSError as exc:
                 self.skipped_count += 1
                 logger.warning(
@@ -94,6 +127,7 @@ class FileChecker(BaseChecker):
     def _join_target(self, base: Path, target: str, root_name: str | None = None) -> Path:
         target_path = Path(target.replace("/", "\\"))
         if target_path.is_absolute():
+            logger.debug("FileChecker using absolute target as-is: %s", target_path)
             return target_path
         target_text = target.replace("/", "\\").rstrip("\\")
         base_text = str(base).replace("/", "\\").rstrip("\\")
@@ -176,44 +210,57 @@ class FileChecker(BaseChecker):
         scan_metadata: bool = False,
         visited: set[str] | None = None,
     ) -> None:
-        if self.max_depth is not None and depth > self.max_depth:
-            return
         visited = visited if visited is not None else set()
-        try:
-            root_key = os.path.normcase(str(root.resolve()))
-        except (OSError, RuntimeError):
-            return
-        if root_key in visited:
-            return
-        visited.add(root_key)
-        try:
-            for item in root.iterdir():
-                if item.name in _SKIP_DIRS:
+        stack: list[tuple[Path, int]] = [(root, depth)]
+        while stack:
+            current, current_depth = stack.pop()
+            if self.max_depth is not None and current_depth > self.max_depth:
+                continue
+            try:
+                root_key = os.path.normcase(str(current.resolve()))
+            except (OSError, RuntimeError):
+                continue
+            if root_key in visited:
+                continue
+            visited.add(root_key)
+            self.extra_stats["dirs_visited"] = self.extra_stats.get("dirs_visited", 0) + 1
+            try:
+                entries = list(current.iterdir())
+            except (OSError, RuntimeError) as exc:
+                self.skipped_count += 1
+                logger.debug("FileChecker could not scan %s: %s", current, format_error(exc))
+                continue
+            for item in entries:
+                if item.name.lower() in _SKIP_DIRS_LOWER:
                     continue
                 if folder_name_matches_target(str(item), self.target_names):
                     paths.add(str(item))
-                if scan_metadata and item.is_file() and item.suffix.lower() in {".exe", ".sys"}:
+                if scan_metadata and item.is_file() and item.suffix.lower() in _METADATA_EXTENSIONS:
+                    self.extra_stats["files_inspected"] = (
+                        self.extra_stats.get("files_inspected", 0) + 1
+                    )
                     self._check_metadata(item)
-                is_junction = getattr(item, "is_junction", lambda: False)
-                if item.is_dir() and not item.is_symlink() and not is_junction():
-                    self._scan_and_validate(item, paths, depth + 1, scan_metadata, visited)
-        except (OSError, RuntimeError) as exc:
-            self.skipped_count += 1
-            logger.debug("FileChecker could not scan %s: %s", root, format_error(exc))
+                try:
+                    is_junction = getattr(item, "is_junction", lambda: False)
+                    if item.is_dir() and not item.is_symlink() and not is_junction():
+                        stack.append((item, current_depth + 1))
+                except (OSError, RuntimeError) as exc:
+                    self.skipped_count += 1
+                    logger.debug("FileChecker could not inspect %s: %s", item, format_error(exc))
 
     def _check_metadata(self, path: Path) -> None:
-        try:
-            properties = get_file_properties(str(path))
-            for ac in self.ac_database:
-                if metadata_matches(properties, ac.companies, ac.products):
-                    self.append_detection(
-                        Detection(
-                            category=CATEGORY_FOLDER,
-                            text=f"METADATA MATCH: {path} ({properties.get('CompanyName')})",
-                            ac_name=ac.name,
-                        )
+
+
+
+        properties = get_file_properties(str(path))
+        for ac in self.ac_database:
+            if metadata_matches(properties, ac.companies, ac.products):
+                ac_name = resolve_ac_from_folder(str(path), self.ac_database) or ac.name
+                self.append_detection(
+                    Detection(
+                        category=CATEGORY_FOLDER,
+                        text=f"METADATA MATCH: {path} ({properties.get('CompanyName')})",
+                        ac_name=ac_name,
                     )
-                    return
-        except OSError as exc:
-            self.fail_count += 1
-            logger.debug("FileChecker metadata lookup failed for %s: %s", path, format_error(exc))
+                )
+                return

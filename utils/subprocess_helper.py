@@ -12,6 +12,15 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_TIMEOUT = 60
+
+
+def _is_windows_api_error(error: BaseException) -> bool:
+    module = getattr(error.__class__, "__module__", "") or ""
+    if module == "pywintypes" or module.startswith("pywintypes."):
+        return True
+    return "error" in error.__class__.__name__.lower() and hasattr(error, "winerror")
+
 
 def format_error(error: BaseException) -> str:
     if isinstance(error, FileNotFoundError):
@@ -26,7 +35,7 @@ def format_error(error: BaseException) -> str:
         label = "invalid value"
     elif isinstance(error, csv.Error):
         label = "CSV parse error"
-    elif error.__class__.__module__ == "pywintypes":
+    elif _is_windows_api_error(error):
         label = "Windows API error"
     else:
         label = error.__class__.__name__
@@ -86,7 +95,7 @@ def _validated_executable(arguments: Sequence[str]) -> Path:
     return executable
 
 
-def run_cmd(arguments: Sequence[str], timeout: int = 60) -> CommandResult:
+def run_cmd(arguments: Sequence[str], timeout: int = SYSTEM_TIMEOUT) -> CommandResult:
     try:
         executable = _validated_executable(arguments)
         process = subprocess.run(
@@ -108,23 +117,43 @@ def run_cmd(arguments: Sequence[str], timeout: int = 60) -> CommandResult:
         return CommandResult(output="", available=False, error=error)
     if process.returncode != 0:
         error = f"command exited with code {process.returncode}"
-        logger.warning("%s failed: %s", arguments[0], error)
+        stderr = (process.stderr or "").strip()
+        if stderr:
+            logger.warning("%s failed: %s: %s", arguments[0], error, stderr[:500])
+        else:
+            logger.warning("%s failed: %s", arguments[0], error)
         return CommandResult(output="", available=False, error=error)
     return CommandResult(output=process.stdout, available=True)
 
 
 def run_powershell(script: str, timeout: int = 120) -> str:
     executable = system_tool("powershell.exe")
-    process = subprocess.run(
-        [executable, "-NoProfile", "-NonInteractive", "-Command", script],
-        capture_output=True,
-        text=True,
-        errors="ignore",
-        timeout=timeout,
-        check=True,
-        shell=False,
-        cwd=str(Path(executable).parent),
-        env=_system_environment(),
-        stdin=subprocess.DEVNULL,
-    )
+    try:
+
+
+
+
+        process = subprocess.run(
+            [
+                executable,
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                script,
+            ],
+            capture_output=True,
+            text=True,
+            errors="ignore",
+            timeout=timeout,
+            check=True,
+            shell=False,
+            cwd=str(Path(executable).parent),
+            env=_system_environment(),
+            stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        logger.warning("PowerShell command timed out after %s seconds", timeout)
+        raise
     return process.stdout

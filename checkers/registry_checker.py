@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import logging
 import re
-import winreg
-from typing import ClassVar
+from typing import Any, ClassVar
+
+try:
+    import winreg
+except ImportError:  # pragma: no cover - non-Windows platforms
+    winreg = None  # type: ignore[assignment]
 
 from checkers.base import BaseChecker
 from checkers.detection import CATEGORY_REG, Detection
+from checkers.matchers import strip_binary_suffix
 from config.sig_index import SignatureIndex
 from config.signatures import AntiCheatInfo
 from utils.subprocess_helper import format_error
@@ -16,6 +21,10 @@ logger = logging.getLogger(__name__)
 TARGETS_PROC = "processes"
 TARGETS_PROC_PROD = "processes+products"
 TARGETS_PROC_SVC_PROD = "processes+services+products"
+
+
+
+_INSTALLER_HINT = re.compile(r"setup|install|uninstall|anti.?cheat|protect|guard", re.IGNORECASE)
 
 
 class RegistryChecker(BaseChecker):
@@ -28,6 +37,7 @@ class RegistryChecker(BaseChecker):
     ) -> None:
         super().__init__(ac_database, sig_index)
         self._all_targets_cache: dict[str, list[str]] = {}
+        self._uninstall_map: list[tuple[str, re.Pattern[str]]] | None = None
 
     def _add(self, entry: str) -> None:
         self.append_detection(Detection(category=CATEGORY_REG, text=entry))
@@ -45,12 +55,26 @@ class RegistryChecker(BaseChecker):
                 else:
                     items = ac.processes
                 result.extend(
-                    item.casefold().removesuffix(".exe").removesuffix(".sys")
-                    for item in items
-                    if len(item) >= 3
+                    strip_binary_suffix(item).casefold() for item in items if len(item) >= 3
                 )
             self._all_targets_cache[sources] = list(dict.fromkeys(result))
         return self._all_targets_cache[sources]
+
+    def _get_uninstall_map(self) -> list[tuple[str, re.Pattern[str]]]:
+        if self._uninstall_map is None:
+            compiled: list[tuple[str, re.Pattern[str]]] = []
+            for ac in self.ac_database:
+                targets = [
+                    re.escape(value.casefold())
+                    for value in [ac.name, *ac.products]
+                    if len(value) >= 4
+                ]
+                if targets:
+                    compiled.append(
+                        (ac.name, re.compile(rf"\b({'|'.join(targets)})\b", re.IGNORECASE))
+                    )
+            self._uninstall_map = compiled
+        return self._uninstall_map
 
     def _wow_subkey(self, subkey: str) -> str | None:
         parts = subkey.split("\\", 1)
@@ -58,15 +82,37 @@ class RegistryChecker(BaseChecker):
             return None
         return f"SOFTWARE\\WOW6432Node\\{parts[1]}" if len(parts) > 1 else "SOFTWARE\\WOW6432Node"
 
+    def _open_key(self, hive: int, subkey: str) -> Any:
+        if winreg is None:  # pragma: no cover - guarded by callers
+            raise FileNotFoundError(subkey)
+        access = winreg.KEY_READ
+        views = (0, getattr(winreg, "KEY_WOW64_64KEY", 0), getattr(winreg, "KEY_WOW64_32KEY", 0))
+        last_error: OSError | None = None
+        for view in dict.fromkeys(views):
+            try:
+                return winreg.OpenKey(hive, subkey, 0, access | view)
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise FileNotFoundError(subkey)
+
     def _check_key_with_wow_variant(self, hive_string: str, subkey: str) -> None:
         self._check_key_exists(hive_string, subkey)
-        if "WOW6432Node" in subkey or hive_string != "HKEY_LOCAL_MACHINE":
+        if "WOW6432Node" in subkey or hive_string.upper() != "HKEY_LOCAL_MACHINE":
             return
         wow_subkey = self._wow_subkey(subkey)
         if wow_subkey:
             self._check_key_exists(hive_string, wow_subkey)
 
     def check(self) -> None:
+
+
+
+        if winreg is None:
+            return
         for ac in self.ac_database:
             for hive, subkey in ac.registry:
                 self._check_key_with_wow_variant(hive, subkey)
@@ -77,21 +123,28 @@ class RegistryChecker(BaseChecker):
         self._scan_appcompat()
 
     def _check_key_exists(self, hive_string: str, subkey: str) -> None:
-        hive = getattr(winreg, hive_string, None)
+        if winreg is None:
+            return
+        hive = getattr(winreg, hive_string.upper(), None)
         if hive is None:
             return
         try:
-            with winreg.OpenKey(hive, subkey, 0, winreg.KEY_READ):
-                self._add(f"{hive_string}\\{subkey}")
+            with self._open_key(hive, subkey):
+                self._add(f"{hive_string.upper()}\\{subkey}")
         except FileNotFoundError:
             return
         except OSError as exc:
             self.fail_count += 1
             logger.debug(
-                "Registry key lookup failed for %s\\%s: %s", hive_string, subkey, format_error(exc)
+                "Registry key lookup failed for %s\\%s: %s",
+                hive_string,
+                subkey,
+                format_error(exc),
             )
 
     def _scan_uninstall_keys(self) -> None:
+        if winreg is None:
+            return
         hives = (
             ("HKEY_LOCAL_MACHINE", winreg.HKEY_LOCAL_MACHINE),
             ("HKEY_CURRENT_USER", winreg.HKEY_CURRENT_USER),
@@ -100,31 +153,28 @@ class RegistryChecker(BaseChecker):
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
             r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
         )
+        uninstall_map = self._get_uninstall_map()
         for hive_name, hive in hives:
             for path in paths:
                 try:
-                    with winreg.OpenKey(hive, path) as root:
+                    with self._open_key(hive, path) as root:
                         for index in range(winreg.QueryInfoKey(root)[0]):
                             try:
                                 subkey_name = winreg.EnumKey(root, index)
                                 with winreg.OpenKey(root, subkey_name) as subkey:
-                                    display_name = str(
-                                        winreg.QueryValueEx(subkey, "DisplayName")[0]
-                                    ).casefold()
-                                    for ac in self.ac_database:
-                                        targets = [
-                                            re.escape(value.casefold())
-                                            for value in [ac.name, *ac.products]
-                                            if len(value) >= 4
-                                        ]
-                                        if targets and re.search(
-                                            rf"\b({'|'.join(targets)})\b",
-                                            display_name,
-                                        ):
-                                            self._add(
-                                                f"REGISTRY UNINSTALL: {hive_name}\\{path}\\{subkey_name} ({display_name})"
-                                            )
-                                            break
+                                    display_name = self._read_value(subkey, "DisplayName")
+
+
+
+                                    extra = " ".join(
+                                        self._read_value(subkey, value_name)
+                                        for value_name in ("Publisher", "InstallLocation")
+                                    )
+                                    if self._uninstall_matches(display_name, extra, uninstall_map):
+                                        self._add(
+                                            f"REGISTRY UNINSTALL: {hive_name}\\{path}"
+                                            f"\\{subkey_name} ({display_name})"
+                                        )
                             except FileNotFoundError:
                                 continue
                             except OSError as exc:
@@ -136,7 +186,33 @@ class RegistryChecker(BaseChecker):
                     self.fail_count += 1
                     logger.debug("Uninstall root scan failed: %s", format_error(exc))
 
+    @staticmethod
+    def _read_value(key: Any, value_name: str) -> str:
+        if winreg is None:
+            return ""
+        try:
+            raw_value = winreg.QueryValueEx(key, value_name)[0]
+        except OSError:
+            return ""
+        return str(raw_value or "")
+
+    @staticmethod
+    def _uninstall_matches(
+        display_name: str, extra: str, uninstall_map: list[tuple[str, re.Pattern[str]]]
+    ) -> bool:
+        for _ac_name, pattern in uninstall_map:
+            if pattern.search(display_name):
+                return True
+
+
+
+            if extra and pattern.search(extra) and _INSTALLER_HINT.search(display_name):
+                return True
+        return False
+
     def _scan_app_paths(self) -> None:
+        if winreg is None:
+            return
         app_paths_key = r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths"
         hives = (
             ("HKEY_LOCAL_MACHINE", winreg.HKEY_LOCAL_MACHINE),
@@ -159,10 +235,15 @@ class RegistryChecker(BaseChecker):
                         except OSError as exc:
                             self.fail_count += 1
                             logger.debug("App Paths scan failed: %s", format_error(exc))
-            except (FileNotFoundError, OSError) as exc:
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                self.fail_count += 1
                 logger.debug("App Paths root scan failed: %s", format_error(exc))
 
     def _scan_startup_keys(self) -> None:
+        if winreg is None:
+            return
         startup_paths = (
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run",
             r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce",
@@ -174,7 +255,10 @@ class RegistryChecker(BaseChecker):
         )
         targets = self._get_targets(TARGETS_PROC_SVC_PROD)
         pattern = (
-            re.compile(rf"\b({'|'.join(re.escape(target) for target in targets)})\b")
+            re.compile(
+                rf"\b({'|'.join(re.escape(target) for target in targets)})\b",
+                re.IGNORECASE,
+            )
             if targets
             else None
         )
@@ -185,7 +269,7 @@ class RegistryChecker(BaseChecker):
                         for index in range(winreg.QueryInfoKey(handle)[1]):
                             try:
                                 value_name, value_data, _ = winreg.EnumValue(handle, index)
-                                combined = f"{value_name} {value_data}".casefold()
+                                combined = f"{value_name or ''} {value_data or ''}"
                                 if pattern and pattern.search(combined):
                                     self._add(
                                         f"STARTUP: {hive_name}\\{path}\\{value_name} = {value_data}"
@@ -205,14 +289,20 @@ class RegistryChecker(BaseChecker):
 
     def _scan_appcompat(self) -> None:
         self._scan_user_values(
-            r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store",
+            r"Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility "
+            r"Assistant\Store",
             "APPCOMPAT HISTORY",
             self._get_targets(TARGETS_PROC_PROD),
         )
 
     def _scan_user_values(self, path: str, label: str, targets: list[str]) -> None:
+        if winreg is None:
+            return
         pattern = (
-            re.compile(rf"\b({'|'.join(re.escape(target) for target in targets)})\b")
+            re.compile(
+                rf"\b({'|'.join(re.escape(target) for target in targets)})\b",
+                re.IGNORECASE,
+            )
             if targets
             else None
         )
@@ -221,7 +311,7 @@ class RegistryChecker(BaseChecker):
                 for index in range(winreg.QueryInfoKey(handle)[1]):
                     try:
                         value_name, _, _ = winreg.EnumValue(handle, index)
-                        if pattern and pattern.search(value_name.casefold()):
+                        if pattern and pattern.search(str(value_name or "")):
                             self._add(f"{label}: {value_name}")
                     except OSError as exc:
                         self.fail_count += 1

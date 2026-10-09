@@ -2,5 +2,9 @@
   "files": [],
   "processes": [],
   "services": [],
-  "folders": []
+  "folders": [],
+  "drivers": [],
+  "registry": [],
+  "tasks": [],
+  "traces": []
 }

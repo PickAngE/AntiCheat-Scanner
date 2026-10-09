@@ -138,7 +138,8 @@
       "Tencent Anti-Cheat",
       "SGuard",
       "UniRTCX"
-    ]
+    ],
+    "notes": "Bare alias 'ACE' (services) is intentionally kept for recall: it is the observed SCM service name. Matching is exact-name (never substring), so a bare 'ACE' hit still requires corroboration with another ACE artifact before any conclusion."
   },
   {
     "name": "EA Javelin",
@@ -223,7 +224,8 @@
       "EAAntiCheat",
       "Javelin",
       "EA Anti-Cheat Service"
-    ]
+    ],
+    "notes": "Bare aliases 'EAC' (services) and 'EAC.sys'/'Jav.sys' (drivers) are intentionally kept for recall: they were observed as EA Javelin component names. 'EAC' alone is ambiguous with EasyAntiCheat in common parlance, so a bare 'EAC' hit should be corroborated with a full EAAntiCheat*/Javelin* name before any conclusion. 'companies' is empty because EA Javelin binaries carry no EA-specific CompanyName usable as standalone evidence; attribution relies on names, paths and registry instead."
   },
   {
     "name": "EAC (EasyAntiCheat)",
@@ -511,6 +513,7 @@
       "HoYoProtect",
       "HoYoBase",
       "HoYoShield"
-    ]
+    ],
+    "notes": "'companies' is empty because HoYoProtect/mhyprot binaries carry no vendor-specific CompanyName usable as standalone evidence (many are WHQL-signed by Microsoft); attribution relies on names, paths and registry instead."
   }
 ]

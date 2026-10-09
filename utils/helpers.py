@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from ctypes import wintypes
 from functools import lru_cache
 from pathlib import Path
@@ -21,9 +22,27 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+SIGNATURE_TIMEOUT = "Signature timeout"
+SIGNATURE_ERROR = "Error checking"
+SIGNATURE_UNSIGNED = "Unsigned/Self-signed"
+
 PS_CMD_TIMEOUT = 120
 BATCH_SIZE = 20
+_PS_MAX_SCRIPT_CHARS = 6000
 _PS_SEMAPHORE = threading.RLock()
+
+ADMIN_WAIT_TIMEOUT_MS = 300000
+
+_HASH_BLOCK_SIZE = 65536
+
+_FILE_PROPERTY_KEYS = (
+    "CompanyName",
+    "ProductName",
+    "FileDescription",
+    "FileVersion",
+    "InternalName",
+    "OriginalFilename",
+)
 
 CSIDL_PROGRAM_FILES = 0x0026
 CSIDL_PROGRAM_FILESX86 = 0x002A
@@ -54,8 +73,9 @@ class _ShellExecuteInfo(ctypes.Structure):
     ]
 
 
-def ps_escape_path(path: str) -> str:
-    return path.replace("'", "''")
+def _ps_quote(path: str) -> str:
+    cleaned = path.replace("\r", "").replace("\n", "").replace("\x00", "")
+    return "'" + cleaned.replace("'", "''") + "'"
 
 
 def _get_default_windows_folder(csidl: int) -> str:
@@ -97,14 +117,26 @@ def get_windows_folder(csidl: int) -> str:
         return _get_default_windows_folder(csidl)
 
 
+def _existing_drives() -> list[str]:
+    return [
+        f"{letter}:\\"
+        for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        if os.path.exists(f"{letter}:\\")
+    ]
+
+
 def get_drives() -> list[str]:
     drives: list[str] = []
     if win32api is None:
-        return [f"{letter}:\\" for letter in "CDEFGH" if os.path.exists(f"{letter}:\\")]
+        return _existing_drives()
     try:
         bitmask = int(win32api.GetLogicalDrives())
-    except (OSError, ValueError):
-        return [f"{letter}:\\" for letter in "CDEFGH" if os.path.exists(f"{letter}:\\")]
+    except (OSError, ValueError) as exc:
+        logger.debug("Unable to list logical drives: %s", format_error(exc))
+        return _existing_drives()
+    except Exception as exc:
+        logger.debug("Unable to list logical drives: %s", format_error(exc))
+        return _existing_drives()
     for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
         if bitmask & 1:
             drives.append(f"{letter}:\\")
@@ -116,36 +148,46 @@ def get_drives() -> list[str]:
 def get_digital_signature(file_path: str) -> str:
     if not os.path.exists(file_path):
         return ""
-    safe_path = ps_escape_path(file_path)
-    script = f"(Get-AuthenticodeSignature -LiteralPath '{safe_path}').SignerCertificate.Subject"
+    script = f"(Get-AuthenticodeSignature -LiteralPath {_ps_quote(file_path)}).SignerCertificate.Subject"
     try:
         with _PS_SEMAPHORE:
             output = run_powershell(script, timeout=PS_CMD_TIMEOUT).strip()
     except subprocess.TimeoutExpired:
         logger.warning("Signature timeout for %s", file_path)
-        return "Signature timeout"
+        return SIGNATURE_TIMEOUT
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         logger.debug("Unable to read signature for %s: %s", file_path, format_error(exc))
-        return "Error checking"
-    return output or "Unsigned/Self-signed"
+        return SIGNATURE_ERROR
+    return output or SIGNATURE_UNSIGNED
 
 
-def _batch_chunk(valid_paths: list[str]) -> dict[str, str]:
+def _build_signature_script(valid_paths: list[str]) -> str:
     script_lines = [
         "$files = @(",
-        *[f"    '{ps_escape_path(path)}'" for path in valid_paths],
+        *[f"    {_ps_quote(path)}" for path in valid_paths],
         ");",
         "foreach ($file in $files) {",
         "  $signature = Get-AuthenticodeSignature -LiteralPath $file -ErrorAction SilentlyContinue;",
         "  if ($signature.SignerCertificate) {",
         "    Write-Output ($file + '|' + $signature.SignerCertificate.Subject);",
         "  } else {",
-        "    Write-Output ($file + '|Unsigned/Self-signed');",
+        f"    Write-Output ($file + '|{SIGNATURE_UNSIGNED}');",
         "  }",
         "}",
     ]
+    return "\n".join(script_lines)
+
+
+def _batch_chunk(valid_paths: list[str]) -> dict[str, str]:
+    if not valid_paths:
+        return {}
+    if len(_build_signature_script(valid_paths)) > _PS_MAX_SCRIPT_CHARS and len(valid_paths) > 1:
+        middle = len(valid_paths) // 2
+        merged = _batch_chunk(valid_paths[:middle])
+        merged.update(_batch_chunk(valid_paths[middle:]))
+        return merged
     try:
-        output = run_powershell("\n".join(script_lines), timeout=PS_CMD_TIMEOUT)
+        output = run_powershell(_build_signature_script(valid_paths), timeout=PS_CMD_TIMEOUT)
     except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         logger.debug("Batch signature lookup failed: %s", format_error(exc))
         return {path: get_digital_signature(path) for path in valid_paths}
@@ -157,14 +199,29 @@ def _batch_chunk(valid_paths: list[str]) -> dict[str, str]:
     return result
 
 
+def _iter_batches(valid_paths: list[str]) -> Iterator[list[str]]:
+    chunk: list[str] = []
+    chunk_chars = 0
+    for path in valid_paths:
+        cost = len(path) + 16
+        if chunk and (len(chunk) >= BATCH_SIZE or chunk_chars + cost > _PS_MAX_SCRIPT_CHARS):
+            yield chunk
+            chunk = []
+            chunk_chars = 0
+        chunk.append(path)
+        chunk_chars += cost
+    if chunk:
+        yield chunk
+
+
 def batch_get_digital_signatures(file_paths: list[str]) -> dict[str, str]:
     valid_paths = [path for path in file_paths if os.path.exists(path)]
     if not valid_paths:
         return {}
     result: dict[str, str] = {}
     with _PS_SEMAPHORE:
-        for start in range(0, len(valid_paths), BATCH_SIZE):
-            result.update(_batch_chunk(valid_paths[start : start + BATCH_SIZE]))
+        for chunk in _iter_batches(valid_paths):
+            result.update(_batch_chunk(chunk))
     return result
 
 
@@ -175,7 +232,7 @@ def get_file_hash(file_path: str) -> str:
     digest = hashlib.sha256()
     try:
         with open(file_path, "rb") as handle:
-            for block in iter(lambda: handle.read(4096), b""):
+            for block in iter(lambda: handle.read(_HASH_BLOCK_SIZE), b""):
                 digest.update(block)
         return digest.hexdigest()
     except OSError as exc:
@@ -184,15 +241,8 @@ def get_file_hash(file_path: str) -> str:
 
 
 @lru_cache(maxsize=256)
-def get_file_properties(file_path: str) -> dict[str, object]:
-    properties: dict[str, object] = {
-        "CompanyName": "",
-        "ProductName": "",
-        "FileDescription": "",
-        "FileVersion": "",
-        "InternalName": "",
-        "OriginalFilename": "",
-    }
+def _cached_file_properties(file_path: str) -> dict[str, object]:
+    properties: dict[str, object] = {key: "" for key in _FILE_PROPERTY_KEYS}
     if not os.path.exists(file_path):
         return properties
     try:
@@ -205,27 +255,44 @@ def get_file_properties(file_path: str) -> dict[str, object]:
     if win32api is None:
         return properties
     try:
-        translation = win32api.GetFileVersionInfo(file_path, "\\VarFileInfo\\Translation")[0]
-        language, codepage = translation
-        string_path = "\\StringFileInfo\\%04X%04X\\%s"
-        for key in tuple(properties):
-            if key in {"CreatedAt", "ModifiedAt", "Size"}:
-                continue
+        translations = win32api.GetFileVersionInfo(file_path, "\\VarFileInfo\\Translation")
+    except (OSError, ValueError, TypeError) as exc:
+        logger.debug("Unable to read version information from %s: %s", file_path, format_error(exc))
+        return properties
+    except Exception as exc:
+        logger.debug("Unable to read version information from %s: %s", file_path, format_error(exc))
+        return properties
+    if not translations:
+        return properties
+    string_path = "\\StringFileInfo\\%04X%04X\\%s"
+    for key in _FILE_PROPERTY_KEYS:
+        for translation in translations:
             try:
-                properties[key] = win32api.GetFileVersionInfo(
+                language, codepage = translation
+                value = win32api.GetFileVersionInfo(
                     file_path,
                     string_path % (language, codepage, key),
                 )
-            except Exception as exc:
-                logger.debug(
-                    "Unable to read version property %s from %s: %s",
-                    key,
-                    file_path,
-                    format_error(exc),
-                )
-    except Exception as exc:
-        logger.debug("Unable to read version information from %s: %s", file_path, format_error(exc))
+            except (OSError, ValueError, TypeError):
+                continue
+            except Exception:
+                continue
+            if value:
+                properties[key] = value
+                break
+        else:
+            logger.debug("Unable to read version property %s from %s", key, file_path)
     return properties
+
+
+def get_file_properties(file_path: str) -> dict[str, object]:
+    return dict(_cached_file_properties(file_path))
+
+
+def _clear_caches() -> None:
+    get_digital_signature.cache_clear()
+    get_file_hash.cache_clear()
+    _cached_file_properties.cache_clear()
 
 
 def is_admin() -> bool:
@@ -244,8 +311,20 @@ def request_admin_rerun() -> int | None:
     if os.name != "nt" or is_admin():
         return None
     try:
-        script = os.path.abspath(sys.argv[0])
-        parameters = subprocess.list2cmdline(["-u", script, *sys.argv[1:]])
+        frozen = bool(getattr(sys, "frozen", False))
+        if frozen:
+            target = sys.executable
+            parameters = subprocess.list2cmdline(sys.argv[1:])
+            directory = str(Path(sys.executable).parent)
+        elif len(sys.argv) > 0 and sys.argv[0] == "-m":
+            target = sys.executable
+            parameters = subprocess.list2cmdline(["-u", "-m", *sys.argv[1:]])
+            directory = os.path.abspath(os.getcwd())
+        else:
+            script = os.path.abspath(sys.argv[0])
+            parameters = subprocess.list2cmdline(["-u", script, *sys.argv[1:]])
+            target = sys.executable
+            directory = str(Path(script).parent)
         windll = getattr(ctypes, "windll", None)
         if windll is None:
             return None
@@ -256,9 +335,9 @@ def request_admin_rerun() -> int | None:
         execute_info.cbSize = ctypes.sizeof(execute_info)
         execute_info.fMask = 0x00000040
         execute_info.lpVerb = "runas"
-        execute_info.lpFile = sys.executable
+        execute_info.lpFile = target
         execute_info.lpParameters = parameters
-        execute_info.lpDirectory = str(Path(script).parent)
+        execute_info.lpDirectory = directory
         execute_info.nShow = 1
         if not shell_execute_ex(ctypes.byref(execute_info)):
             return None
@@ -274,8 +353,12 @@ def request_admin_rerun() -> int | None:
         close_handle = windll.kernel32.CloseHandle
         close_handle.argtypes = [wintypes.HANDLE]
         close_handle.restype = wintypes.BOOL
-        wait_result = wait_for_single_object(process_handle, 0xFFFFFFFF)
+        wait_result = wait_for_single_object(process_handle, ADMIN_WAIT_TIMEOUT_MS)
         if wait_result != 0:
+
+
+
+            logger.debug("Timed out or failed waiting for the elevated process")
             close_handle(process_handle)
             return None
         exit_code = wintypes.DWORD()

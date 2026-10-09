@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, ClassVar
 
 import psutil
@@ -15,6 +16,8 @@ from utils.subprocess_helper import format_error
 
 logger = logging.getLogger(__name__)
 
+_WORD_TOKENS = re.compile(r"[^a-z0-9]+")
+
 
 class ServiceChecker(BaseChecker):
     CATEGORY: ClassVar[str] = CATEGORY_SVC
@@ -25,9 +28,34 @@ class ServiceChecker(BaseChecker):
         sig_index: SignatureIndex | None = None,
     ) -> None:
         super().__init__(ac_database, sig_index)
+
+
+
+
         self._all_signatures = [
             signature for ac in ac_database for signature in ac.services + ac.processes + ac.drivers
         ]
+
+
+        self._target_exact = {
+            base
+            for signature in self._all_signatures
+            for base in (signature.casefold().strip(),)
+            if len(base) >= 3
+        }
+
+        self._target_substr = {base for base in self._target_exact if len(base) >= 5}
+
+    def _might_match(self, *texts: str) -> bool:
+        if self.sig_index is not None and any(
+            text and self.sig_index.lookup(text) for text in texts
+        ):
+            return True
+        combined = " ".join(texts).casefold()
+        tokens = {token for token in _WORD_TOKENS.split(combined) if token}
+        if tokens & self._target_exact:
+            return True
+        return any(base in combined for base in self._target_substr)
 
     def check(self) -> None:
         try:
@@ -40,21 +68,25 @@ class ServiceChecker(BaseChecker):
             try:
                 service_name = service.name()
                 display_name = service.display_name()
+                try:
+                    raw_binpath = service.binpath() or ""
+                except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+                    raw_binpath = ""
+                executable = extract_exe_path(raw_binpath) if raw_binpath else ""
+                if not self._might_match(service_name, display_name, executable):
+                    continue
                 found_match = target_matches(service_name, self._all_signatures) or target_matches(
                     display_name,
                     self._all_signatures,
                 )
-                executable = ""
-                if not found_match:
-                    raw_binpath = service.binpath() or ""
-                    if raw_binpath:
-                        executable = extract_exe_path(raw_binpath)
-                        found_match = content_matches(
-                            executable,
-                            self._all_signatures,
-                        ) or target_matches(executable, self._all_signatures)
+                if not found_match and executable:
+                    found_match = content_matches(
+                        executable,
+                        self._all_signatures,
+                    ) or target_matches(executable, self._all_signatures)
                 if not found_match:
                     continue
+
                 service_data: dict[str, Any] = service.as_dict()
                 status = str(service_data.get("status", ""))
                 active = status.casefold() == "running"
@@ -87,6 +119,6 @@ class ServiceChecker(BaseChecker):
                 )
             except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
                 continue
-            except (OSError, TypeError, ValueError) as exc:
+            except (OSError, psutil.Error, TypeError, ValueError) as exc:
                 self.fail_count += 1
                 logger.debug("ServiceChecker could not inspect a service: %s", format_error(exc))

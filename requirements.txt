@@ -1,2 +1,5 @@
-﻿psutil>=5.9.0,<7
-pywin32>=306,<400
+﻿# Runtime dependencies (mirrors [project.dependencies] in pyproject.toml,
+# which is the source of truth — `pip install .` uses it directly).
+# Requires python>=3.10
+psutil>=5.9.0,<7
+pywin32>=306,<400; sys_platform=="win32"

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable, Sequence
 
 from config.signatures import AntiCheatInfo
 
 logger = logging.getLogger(__name__)
+
+_EXTENSION_PATTERN = re.compile(r"\.(?:exe|sys|dll)", re.IGNORECASE)
+_EXECUTABLE_EXTENSIONS = (".exe", ".sys", ".dll")
 
 
 class SignatureIndex:
@@ -41,11 +45,21 @@ class SignatureIndex:
     def lookup(self, text: str, kinds: Iterable[str] | None = None) -> str | None:
         if not text:
             return None
-        normalized_text = text.replace("/", "\\")
-        keys: tuple[str, ...] = (self._normalize(normalized_text),)
-        basename = normalized_text.rsplit("\\", 1)[-1]
-        if basename != normalized_text:
-            keys += (self._normalize(basename),)
+        full_key = self._normalize(text)
+        keys: list[str] = []
+        if full_key:
+            keys.append(full_key)
+
+
+            if "\\" in full_key:
+                basename_key = full_key.rsplit("\\", 1)[-1]
+                if basename_key and basename_key not in keys:
+                    keys.append(basename_key)
+
+        raw_basename = text.replace("/", "\\").rsplit("\\", 1)[-1]
+        base_key = self._normalize(raw_basename)
+        if base_key and base_key not in keys:
+            keys.append(base_key)
         allowed = set(kinds) if kinds is not None else None
         for key in keys:
             products_by_kind = self._index.get(key)
@@ -58,18 +72,44 @@ class SignatureIndex:
                 for product in values
             }
             if products:
+
                 return sorted(products)[0]
         return None
 
     @staticmethod
     def _normalize(signature: str) -> str:
-        normalized = signature.strip().lower().replace("/", "\\")
-        for extension in (".exe", ".sys", ".dll"):
-            if normalized.endswith(extension):
-                return normalized[: -len(extension)]
+        text = signature.strip()
+        if not text:
+            return ""
+
+        if text.startswith('"'):
+            end = text.find('"', 1)
+            text = text[1:end] if end != -1 else text[1:].strip()
+        text = text.strip().strip("\"'").strip()
+        if not text:
+            return ""
+
+        if text.startswith("\\??\\"):
+            text = text[4:]
+
+
+
+        match = _EXTENSION_PATTERN.search(text)
+        text = text[: match.end()] if match else (text.split()[0] if text else "")
+        normalized = text.strip().strip("\"'").lower().replace("/", "\\")
+
+        changed = True
+        while changed:
+            changed = False
+            for extension in _EXECUTABLE_EXTENSIONS:
+                if normalized.endswith(extension):
+                    normalized = normalized[: -len(extension)]
+                    changed = True
+                    break
         return normalized
 
     def __len__(self) -> int:
+
         return len(self._index)
 
     def __contains__(self, key: str) -> bool:

@@ -1,0 +1,11 @@
+{
+  "_comment": "Example whitelist. Copy to whitelist.json and fill in. All 8 keys must be present (lists of strings). Matching is case-insensitive; '/' and '\\' are equivalent; trailing backslashes are ignored. Detection-text prefixes ('TASK: ', 'DRIVER CERT: ', ...) and ' [RUNNING]'/' [STOPPED]' suffixes are stripped before matching, so whitelist the bare path or name.",
+  "files": ["C:\\Temp\\installer.exe"],
+  "processes": ["chrome.exe"],
+  "services": ["WindowsUpdate"],
+  "folders": ["C:\\Temp\\Whitelisted"],
+  "drivers": [],
+  "registry": ["HKEY_LOCAL_MACHINE\\SOFTWARE\\Vendor\\Key"],
+  "tasks": [],
+  "traces": []
+}

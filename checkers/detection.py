@@ -11,6 +11,9 @@ CATEGORY_REG = "registry"
 CATEGORY_TASK = "tasks"
 CATEGORY_TRACE = "traces"
 
+
+CATEGORY_ACTIVE = "active"
+
 ALL_CATEGORIES = (
     CATEGORY_SVC,
     CATEGORY_PROC,
@@ -22,6 +25,7 @@ ALL_CATEGORIES = (
 )
 
 
+
 @dataclass(slots=True)
 class Detection:
     category: str
@@ -30,6 +34,12 @@ class Detection:
     active: bool = False
     raw: Any = field(default=None, repr=False)
     tech: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.category not in ALL_CATEGORIES:
+            raise ValueError(f"Unknown detection category: {self.category!r}")
+        if not self.text.strip():
+            raise ValueError("Detection text must be non-empty")
 
 
 CheckerResults = dict[str, list[Detection]]

@@ -26,14 +26,22 @@ def build_checkers(
     ac_database: list[AntiCheatInfo],
     sig_index: SignatureIndex | None = None,
     max_depth: int | None = 1,
+    include: set[str] | None = None,
+    exclude: set[str] | None = None,
+    eventlog_limit: int = 300,
 ) -> list[BaseChecker]:
-    checkers: list[BaseChecker] = [
-        ServiceChecker(ac_database, sig_index),
-        ProcessChecker(ac_database, sig_index),
-        DriverFileChecker(ac_database, sig_index),
-        FileChecker(ac_database, sig_index, max_depth=max_depth),
-        RegistryChecker(ac_database, sig_index),
-        TaskChecker(ac_database, sig_index),
-        TraceChecker(ac_database, sig_index),
-    ]
+    checkers: list[BaseChecker] = []
+    for checker_cls in CHECKER_CLASSES:
+        if include is not None and checker_cls.CATEGORY not in include:
+            continue
+        if exclude is not None and checker_cls.CATEGORY in exclude:
+            continue
+        if checker_cls is FileChecker:
+            checkers.append(checker_cls(ac_database, sig_index, max_depth=max_depth))
+        elif checker_cls is TraceChecker:
+            checkers.append(
+                checker_cls(ac_database, sig_index, eventlog_limit=eventlog_limit)
+            )
+        else:
+            checkers.append(checker_cls(ac_database, sig_index))
     return checkers

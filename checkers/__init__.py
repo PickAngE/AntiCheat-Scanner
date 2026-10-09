@@ -1,6 +1,7 @@
 from .base import BaseChecker
 from .detection import (
     ALL_CATEGORIES,
+    CATEGORY_ACTIVE,
     CATEGORY_DRV,
     CATEGORY_FOLDER,
     CATEGORY_PROC,
@@ -14,6 +15,7 @@ from .detection import (
 
 __all__ = [
     "ALL_CATEGORIES",
+    "CATEGORY_ACTIVE",
     "CATEGORY_DRV",
     "CATEGORY_FOLDER",
     "CATEGORY_PROC",

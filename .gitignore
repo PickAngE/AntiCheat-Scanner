@@ -15,15 +15,15 @@ build/
 dist/
 *.egg-info/
 
-# Local development files
-/tests/
-/requirements-dev.txt
-/mypy.ini
-/pytest.ini
-/pyproject.toml
-/.github/
+# Local development files (never pushed to prod: tests and dev configs stay local)
 
-# Tests and static analysis
+# Tests and static analysis (local only, not pushed to prod)
+tests/
+requirements-dev.txt
+requirements.lock.txt
+pytest.ini
+mypy.ini
+.github/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -37,6 +37,7 @@ htmlcov/
 *.stackdump
 /test_output
 /test_output.json
+*audit.md
 
 # Generated reports and logs
 logs/
