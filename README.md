@@ -4,8 +4,6 @@ Anti-Cheat Scanner is a Windows utility for identifying anti-cheat software, rel
 
 ## Supported targets
 
-The covered list is fixed; database work only improves entry quality, never the roster.
-
 | Short label | Database `name` |
 |---|---|
 | ACE / AntiCheatExpert | `ACE (AnticheatExpert)` |
@@ -13,11 +11,6 @@ The covered list is fixed; database work only improves entry quality, never the 
 | Easy Anti-Cheat | `EAC (EasyAntiCheat)` |
 | BattlEye | `BE (BattlEye)` |
 | HoYoProtect | `HoYoProtect` |
-
-Note: bare `EAC` (service) / `EAC.sys` (driver) entries belong to **EA Javelin**
-(observed component names), even though `EAC` commonly abbreviates
-EasyAntiCheat. Corroborate a bare-`EAC` hit with a full `EAAntiCheat*`/`Javelin*`
-name before concluding. See `config/signatures.md`.
 
 ## Detection areas
 
