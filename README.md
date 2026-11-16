@@ -77,8 +77,8 @@ categories, counted once). In JSON it appears as the `active` list.
 ## Installation
 
 ```powershell
-git clone https://github.com/PickAngE/Anti-Cheat-Scanner.git
-cd Anti-Cheat-Scanner
+git clone https://github.com/PickAngE/AntiCheat-Scanner.git
+cd AntiCheat-Scanner
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
@@ -109,7 +109,7 @@ Available options:
 ```text
 --json              Write a JSON report
 --workers N         Number of concurrent checkers (default: 5)
---timeout N         Per-checker timeout in seconds (default: 300)
+--timeout N         Maximum duration of the parallel scan phase (default: 300)
 --eventlog-limit N  System event-log records inspected (default: 300)
 --max-depth N       Maximum filesystem search depth (default: 1)
 --full              Scan configured roots recursively
@@ -132,8 +132,11 @@ Available options:
 Categories for `--include`/`--exclude`: `services`, `processes`, `drivers`,
 `folders`, `registry`, `tasks`, `traces`.
 
-The scanner requests elevation through UAC when needed. A denied, failed, or
-timed-out elevation cancels the scan with a non-zero exit code.
+`--timeout` bounds the whole parallel scan phase. Checkers still running when the
+budget expires are reported as partial, and their partial results are kept.
+
+The scanner requests elevation through UAC when needed. A denied or failed
+elevation cancels the scan with a non-zero exit code.
 
 ### Exit codes
 
@@ -157,6 +160,7 @@ plus scanner/host/config context. JSON reports add a versioned envelope:
   "host": {"hostname": "...", "windows_version": "...", "admin": true},
   "cli": {"workers": 5, "max_depth": 1},
   "config_sha256": "...",
+  "whitelist_sha256": "...",
   "total_detections": 31,
   "scan_status": "complete",
   "duration_seconds": 8.934,

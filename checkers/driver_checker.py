@@ -8,7 +8,7 @@ from typing import ClassVar
 import psutil
 
 from checkers.base import BaseChecker
-from checkers.detection import CATEGORY_DRV, Detection
+from checkers.detection import CATEGORY_DRV, DRIVER_PREFIXES, Detection
 from checkers.matchers import extract_exe_path, metadata_matches, normalize_alnum
 from config.sig_index import SignatureIndex
 from config.signatures import AntiCheatInfo
@@ -17,9 +17,6 @@ from utils.subprocess_helper import format_error
 
 logger = logging.getLogger(__name__)
 
-
-
-DRIVER_PREFIXES = ("DRIVER METADATA:", "DRIVER CERT:")
 
 
 class DriverFileChecker(BaseChecker):

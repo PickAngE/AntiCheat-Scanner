@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import argparse
-import concurrent.futures
 import contextlib
 import importlib.metadata
 import json
 import logging
 import os
 import sys
+import threading
 import time
+import traceback
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,7 @@ from checkers.base import BaseChecker
 from checkers.detection import ALL_CATEGORIES
 from checkers.registry import CHECKER_CLASSES, build_checkers
 from config.sig_index import SignatureIndex
-from config.signatures import AntiCheatInfo, get_ac_database, validate_signatures
+from config.signatures import get_ac_database, validate_signatures
 from config.whitelist import get_whitelist
 from config.whitelist import set_disabled as set_whitelist_disabled
 from report import (
@@ -45,9 +46,7 @@ def get_scanner_version() -> str:
     except importlib.metadata.PackageNotFoundError:
         pass
     try:
-        from pathlib import Path as _Path
-
-        for line in (_Path(__file__).resolve().parent / "pyproject.toml").read_text(
+        for line in (Path(__file__).resolve().parent / "pyproject.toml").read_text(
             encoding="utf-8"
         ).splitlines():
             stripped = line.strip()
@@ -105,7 +104,7 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--timeout",
         type=_positive_int,
         default=DEFAULT_TIMEOUT,
-        help="per-checker timeout in seconds (default: %(default)s)",
+        help="maximum duration of the parallel scan phase in seconds (default: %(default)s)",
     )
     parser.add_argument(
         "--eventlog-limit",
@@ -187,25 +186,6 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(arguments)
 
 
-def _build_checkers(
-    ac_database: list[AntiCheatInfo],
-    sig_index: SignatureIndex,
-    max_depth: int | None = 1,
-    include: set[str] | None = None,
-    exclude: set[str] | None = None,
-    eventlog_limit: int = 300,
-) -> list[BaseChecker]:
-
-    return build_checkers(
-        ac_database,
-        sig_index,
-        max_depth=max_depth,
-        include=include,
-        exclude=exclude,
-        eventlog_limit=eventlog_limit,
-    )
-
-
 def _run_list_checkers() -> int:
     for checker_cls in CHECKER_CLASSES:
         print(f"{checker_cls.__name__}: {checker_cls.CATEGORY}")
@@ -255,66 +235,71 @@ def _run_checkers(
         return stats
     max_workers = max(1, min(len(checkers), workers))
     logger.log("[*] Running subsystem checks in parallel...")
-    submitted_at = time.perf_counter()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
-        future_map = {pool.submit(checker.check): checker for checker in checkers}
-        pending = set(future_map)
-        while pending:
-            done, pending = concurrent.futures.wait(
-                pending,
-                timeout=timeout,
-                return_when=concurrent.futures.FIRST_COMPLETED,
-            )
-            for future in done:
-                checker = future_map[future]
-                checker_name = type(checker).__name__
-                stats[checker_name] = {
-                    "duration_s": round(time.perf_counter() - submitted_at, 3)
-                }
-                try:
-                    future.result()
-                    suffix = (
-                        f" ({checker.skipped_count} paths skipped)"
-                        if checker.skipped_count
-                        else ""
-                    )
-                    logger.log(f"  [+] {checker_name} complete{suffix}")
-                except Exception as exc:
+    batch_start = time.perf_counter()
+    deadline = batch_start + timeout
+    started: dict[str, float] = {}
+    finished: dict[str, float] = {}
+    errors: dict[str, Exception] = {}
+    slots = threading.Semaphore(max_workers)
 
+    def run(checker: BaseChecker) -> None:
+        checker_name = type(checker).__name__
+        with slots:
+            started[checker_name] = time.perf_counter()
+            try:
+                checker.check()
+            except Exception as exc:
+                errors[checker_name] = exc
+            finally:
+                finished[checker_name] = time.perf_counter()
 
-                    checker.fail_count += 1
-                    logger.log(f"  [!] {checker_name} failed: {format_error(exc)}")
-                    logger.log(f"  [!] Error type: {type(exc).__name__}")
-                if checker.fail_count:
-                    logger.log(f"  [!] {checker_name} reported {checker.fail_count} item errors")
-                if checker.whitelisted_count:
-                    logger.log(
-                        f"  [*] {checker_name} ignored {checker.whitelisted_count} whitelisted items"
-                    )
-            if not done and pending:
-                for future in pending:
-                    checker = future_map[future]
-                    checker_name = type(checker).__name__
-                    checker.fail_count += 1
-                    stats[checker_name] = {
-                        "duration_s": round(time.perf_counter() - submitted_at, 3)
-                    }
-                    logger.log(
-                        f"  [!] {checker_name} timed out after {timeout} seconds; skipped."
-                    )
-                    future.cancel()
-                break
-    for checker in checkers:
-        entry = stats.setdefault(type(checker).__name__, {"duration_s": 0.0})
-        entry.update(
-            {
-                "failures": checker.fail_count,
-                "skipped": checker.skipped_count,
-                "whitelisted": checker.whitelisted_count,
-
-                **getattr(checker, "extra_stats", {}),
-            }
+    threads = [
+        threading.Thread(
+            target=run,
+            args=(checker,),
+            name=f"acs-checker-{index}",
+            daemon=True,
         )
+        for index, checker in enumerate(checkers)
+    ]
+    for thread in threads:
+        thread.start()
+    for checker, thread in zip(checkers, threads, strict=True):
+        checker_name = type(checker).__name__
+        thread.join(max(0.0, deadline - time.perf_counter()))
+        if thread.is_alive():
+            checker.fail_count += 1
+            logger.log(
+                f"  [!] {checker_name} did not complete within the {timeout}s scan budget; "
+                "partial results kept."
+            )
+        elif checker_name in errors:
+            error = errors[checker_name]
+            checker.fail_count += 1
+            logger.log(f"  [!] {checker_name} failed: {format_error(error)}")
+            logger.log(f"  [!] Error type: {type(error).__name__}")
+        else:
+            suffix = (
+                f" ({checker.skipped_count} paths skipped)" if checker.skipped_count else ""
+            )
+            logger.log(f"  [+] {checker_name} complete{suffix}")
+        if checker.fail_count:
+            logger.log(f"  [!] {checker_name} reported {checker.fail_count} item errors")
+        if checker.whitelisted_count:
+            logger.log(
+                f"  [*] {checker_name} ignored {checker.whitelisted_count} whitelisted items"
+            )
+    for checker in checkers:
+        checker_name = type(checker).__name__
+        start = started.get(checker_name, batch_start)
+        end = finished.get(checker_name, time.perf_counter())
+        stats[checker_name] = {
+            "duration_s": round(max(0.0, end - start), 3),
+            "failures": checker.fail_count,
+            "skipped": checker.skipped_count,
+            "whitelisted": checker.whitelisted_count,
+            **getattr(checker, "extra_stats", {}),
+        }
     return stats
 
 
@@ -351,7 +336,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 return rerun_exit_code
 
 
-            logger.log("[!] UAC elevation was denied or timed out. Scan cancelled.")
+            logger.log("[!] UAC elevation was denied or failed. Scan cancelled.")
             return EXIT_PARTIAL_OR_ERROR
 
         if args.no_whitelist:
@@ -361,7 +346,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
         report_path = Path(logger.start_logging(str(args.output_dir))).resolve()
         ac_database = get_ac_database()
         sig_index = SignatureIndex.build(ac_database)
-        checkers = _build_checkers(
+        checkers = build_checkers(
             ac_database,
             sig_index,
             max_depth=args.max_depth,
@@ -373,7 +358,7 @@ def main(arguments: Sequence[str] | None = None) -> int:
             logger.log("[!] No checkers configured; nothing to scan.")
             return 0
         checker_stats = _run_checkers(checkers, args.workers, args.timeout)
-        checker_results = {checker.CATEGORY: checker.found for checker in checkers}
+        checker_results = {checker.CATEGORY: list(checker.found) for checker in checkers}
         data_package = build_found_map(ac_database, checker_results, sig_index=sig_index)
 
 
@@ -414,6 +399,8 @@ def main(arguments: Sequence[str] | None = None) -> int:
         logger.log(f"\n [!] Critical error: {format_error(exc)}")
         logger.log(f"[*] Scan duration: {time.perf_counter() - scan_started:.3f} seconds")
         logger.log(f"  [!] Error type: {type(exc).__name__}")
+        if args.verbose:
+            logger.log(traceback.format_exc())
     finally:
         logger.close()
     if args.pause and sys.stdin.isatty():

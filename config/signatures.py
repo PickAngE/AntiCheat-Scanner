@@ -163,7 +163,3 @@ def get_ac_database() -> list[AntiCheatInfo]:
         raise ValueError(f"Unable to load signatures database at {data_path}: {exc}") from exc
 
     return _parse_database(raw, data_path)
-
-
-def clear_ac_database_cache() -> None:
-    get_ac_database.cache_clear()

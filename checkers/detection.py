@@ -24,6 +24,7 @@ ALL_CATEGORIES = (
     CATEGORY_TRACE,
 )
 
+DRIVER_PREFIXES = ("DRIVER METADATA:", "DRIVER CERT:")
 
 
 @dataclass(slots=True)

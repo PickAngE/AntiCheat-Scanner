@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 from typing import ClassVar
 
@@ -65,9 +66,21 @@ _SKIP_DIRS = frozenset(
 )
 
 _SKIP_DIRS_LOWER = frozenset(entry.lower() for entry in _SKIP_DIRS)
-_METADATA_SCAN_ROOTS = frozenset(
-    {"Downloads", "Desktop", "Documents", "Temp", r"AppData\Local\Temp"}
-)
+
+
+def _build_folder_hint(targets: list[str]) -> re.Pattern[str] | None:
+    segments: set[str] = set()
+    for target in targets:
+        normalized = target.replace("/", "\\").strip().rstrip("\\")
+        if "\\" not in normalized:
+            continue
+        last = normalized.rsplit("\\", 1)[-1].strip()
+        if last:
+            segments.add(last)
+    if not segments:
+        return None
+    alternatives = "|".join(re.escape(segment) for segment in sorted(segments))
+    return re.compile(rf"(?<![a-z0-9])(?:{alternatives})(?![a-z0-9])", re.IGNORECASE)
 
 
 class FileChecker(BaseChecker):
@@ -82,6 +95,7 @@ class FileChecker(BaseChecker):
         super().__init__(ac_database, sig_index)
         self.max_depth = None if max_depth is None else max(0, max_depth)
         self.target_names = [folder for ac in ac_database for folder in ac.folders]
+        self._folder_hint = _build_folder_hint(self.target_names)
 
     def check(self) -> None:
         paths: set[str] = set()
@@ -171,7 +185,7 @@ class FileChecker(BaseChecker):
             )
 
     def _should_scan_metadata(self, root_name: str) -> bool:
-        return root_name in _METADATA_SCAN_ROOTS
+        return root_name in _USER_RELATIVE_ROOTS
 
     def _collect_from_drive(
         self,
@@ -211,13 +225,14 @@ class FileChecker(BaseChecker):
         visited: set[str] | None = None,
     ) -> None:
         visited = visited if visited is not None else set()
-        stack: list[tuple[Path, int]] = [(root, depth)]
+        stack: list[tuple[str, int]] = [(os.fspath(root), depth)]
+        hint = self._folder_hint
         while stack:
             current, current_depth = stack.pop()
             if self.max_depth is not None and current_depth > self.max_depth:
                 continue
             try:
-                root_key = os.path.normcase(str(current.resolve()))
+                root_key = os.path.normcase(os.path.realpath(current))
             except (OSError, RuntimeError):
                 continue
             if root_key in visited:
@@ -225,28 +240,49 @@ class FileChecker(BaseChecker):
             visited.add(root_key)
             self.extra_stats["dirs_visited"] = self.extra_stats.get("dirs_visited", 0) + 1
             try:
-                entries = list(current.iterdir())
+                with os.scandir(current) as iterator:
+                    entries = list(iterator)
             except (OSError, RuntimeError) as exc:
                 self.skipped_count += 1
                 logger.debug("FileChecker could not scan %s: %s", current, format_error(exc))
                 continue
-            for item in entries:
-                if item.name.lower() in _SKIP_DIRS_LOWER:
+            for entry in entries:
+                name = entry.name
+                if name.lower() in _SKIP_DIRS_LOWER:
                     continue
-                if folder_name_matches_target(str(item), self.target_names):
-                    paths.add(str(item))
-                if scan_metadata and item.is_file() and item.suffix.lower() in _METADATA_EXTENSIONS:
+                entry_path = entry.path
+                if (hint is None or hint.search(entry_path)) and folder_name_matches_target(
+                    entry_path, self.target_names
+                ):
+                    paths.add(entry_path)
+                try:
+                    is_file = entry.is_file()
+                    is_dir = entry.is_dir()
+                except OSError as exc:
+                    self.skipped_count += 1
+                    logger.debug(
+                        "FileChecker could not inspect %s: %s", entry_path, format_error(exc)
+                    )
+                    continue
+                suffix = os.path.splitext(name)[1].lower()
+                if scan_metadata and is_file and suffix in _METADATA_EXTENSIONS:
                     self.extra_stats["files_inspected"] = (
                         self.extra_stats.get("files_inspected", 0) + 1
                     )
-                    self._check_metadata(item)
+                    self._check_metadata(Path(entry_path))
+                if not is_dir:
+                    continue
                 try:
-                    is_junction = getattr(item, "is_junction", lambda: False)
-                    if item.is_dir() and not item.is_symlink() and not is_junction():
-                        stack.append((item, current_depth + 1))
-                except (OSError, RuntimeError) as exc:
+                    is_junction = getattr(entry, "is_junction", None)
+                    if entry.is_symlink() or (is_junction is not None and is_junction()):
+                        continue
+                except OSError as exc:
                     self.skipped_count += 1
-                    logger.debug("FileChecker could not inspect %s: %s", item, format_error(exc))
+                    logger.debug(
+                        "FileChecker could not inspect %s: %s", entry_path, format_error(exc)
+                    )
+                    continue
+                stack.append((entry_path, current_depth + 1))
 
     def _check_metadata(self, path: Path) -> None:
 

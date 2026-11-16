@@ -18,13 +18,14 @@ from checkers.detection import (
     CATEGORY_SVC,
     CATEGORY_TASK,
     CATEGORY_TRACE,
+    DRIVER_PREFIXES,
     CheckerResults,
     Detection,
 )
-from checkers.driver_checker import DRIVER_PREFIXES
 from checkers.matchers import extract_exe_path
 from config.sig_index import SignatureIndex
 from config.signatures import AntiCheatInfo, signatures_sha256
+from config.whitelist import whitelist_sha256
 from utils.attribution import resolve_ac_from_folder, resolve_ac_from_registry, resolve_ac_name
 from utils.helpers import batch_get_digital_signatures, get_file_hash, get_file_properties, is_admin
 from utils.logger import logger
@@ -41,6 +42,7 @@ class ScanContext(TypedDict, total=False):
     admin: bool
     cli: dict[str, Any]
     config_sha256: str
+    whitelist_sha256: str
 
 
 class DataPackage(TypedDict, total=False):
@@ -66,6 +68,7 @@ def build_context(cli_info: dict[str, Any], scanner_version: str) -> ScanContext
         admin=is_admin(),
         cli=cli_info,
         config_sha256=signatures_sha256(),
+        whitelist_sha256=whitelist_sha256(),
     )
 
 
@@ -139,9 +142,9 @@ def build_found_map(
     technical_info: list[dict[str, Any]] = []
 
 
-    service_exes: dict[str, str] = {}
-    driver_paths: dict[str, str] = {}
-    folder_files: dict[str, str] = {}
+    service_exes: set[str] = set()
+    driver_paths: set[str] = set()
+    folder_files: set[str] = set()
 
     def add(
         ac_name: str | None,
@@ -197,7 +200,7 @@ def build_found_map(
         exe_path = _service_exe(raw)
         tech = None
         if exe_path:
-            service_exes[exe_path] = exe_path
+            service_exes.add(exe_path)
             tech = _tech_for_file(
                 os.path.basename(exe_path),
                 exe_path,
@@ -240,7 +243,7 @@ def build_found_map(
             fs_path = _folder_fs_path(path)
             if fs_path:
                 if os.path.isfile(fs_path):
-                    folder_files[fs_path] = fs_path
+                    folder_files.add(fs_path)
                     tech = _tech_for_file(
                         os.path.basename(fs_path), fs_path, "present"
                     )
@@ -261,7 +264,7 @@ def build_found_map(
         path = detection.raw if isinstance(detection.raw, str) else detection.text
         fs_path = _driver_fs_path(path)
         if fs_path:
-            driver_paths[fs_path] = fs_path
+            driver_paths.add(fs_path)
         resolved_drivers.append((detection, fs_path))
     driver_signatures = batch_get_digital_signatures(sorted(driver_paths))
     service_signatures = batch_get_digital_signatures(sorted(service_exes))
@@ -443,6 +446,7 @@ def write_json_report(data_package: DataPackage, total_found: int, output_path: 
         },
         "cli": context.get("cli"),
         "config_sha256": context.get("config_sha256"),
+        "whitelist_sha256": context.get("whitelist_sha256"),
         "total_detections": total_found,
         "scan_status": data_package.get("scan_status", "unknown"),
         "duration_seconds": data_package.get("duration_seconds"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -139,7 +140,8 @@ def _load_whitelist() -> WhitelistData:
 
 def _load_whitelist_sets() -> dict[str, frozenset[str]]:
     _load_whitelist()
-    assert _whitelist_sets is not None
+    if _whitelist_sets is None:
+        raise RuntimeError("Whitelist cache was not initialised")
     return _whitelist_sets
 
 
@@ -248,3 +250,14 @@ def get_whitelist() -> WhitelistData:
         tasks=list(whitelist["tasks"]),
         traces=list(whitelist["traces"]),
     )
+
+
+def whitelist_sha256() -> str:
+    digest = hashlib.sha256()
+    try:
+        with _WHITELIST_PATH.open("rb") as handle:
+            for block in iter(lambda: handle.read(65536), b""):
+                digest.update(block)
+    except OSError:
+        return ""
+    return digest.hexdigest()

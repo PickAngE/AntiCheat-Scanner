@@ -8,17 +8,31 @@ __pycache__/
 
 # Virtual environments
 .venv/
+.venv*/
 venv/
+env/
+ENV/
+.python-version
+.freebuff
 
 # Packaging
 build/
 dist/
+*.egg
 *.egg-info/
+.eggs/
+*.whl
+pip-wheel-metadata/
+*.pdb
+*.ilk
 
 # Local development files (never pushed to prod: tests and dev configs stay local)
 
 # Tests and static analysis (local only, not pushed to prod)
 tests/
+/conftest.py
+/test_*.py
+/*_test.py
 requirements-dev.txt
 requirements.lock.txt
 pytest.ini
@@ -38,6 +52,9 @@ htmlcov/
 /test_output
 /test_output.json
 *audit.md
+*AUDIT.md
+*changelog*.md
+*CHANGELOG*.md
 
 # Generated reports and logs
 logs/
@@ -76,6 +93,9 @@ id_ed25519*
 /run_scanner.*
 /PushGithub.bat*
 /query
+
+# Agent / local tooling
+.freebuff/
 
 # Editors
 .vscode/

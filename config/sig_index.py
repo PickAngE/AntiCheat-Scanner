@@ -107,10 +107,3 @@ class SignatureIndex:
                     changed = True
                     break
         return normalized
-
-    def __len__(self) -> int:
-
-        return len(self._index)
-
-    def __contains__(self, key: str) -> bool:
-        return self._normalize(key) in self._index

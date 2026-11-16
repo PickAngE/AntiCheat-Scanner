@@ -68,10 +68,6 @@ def _resolve_cached(text_lower: str, kinds: tuple[str, ...]) -> str | None:
     return None
 
 
-def clear_cache() -> None:
-    _resolve_cached.cache_clear()
-
-
 def resolve_ac_name(
     text: str,
     ac_database: Sequence[AntiCheatInfo],

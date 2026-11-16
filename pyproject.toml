@@ -27,14 +27,22 @@ build-backend = "setuptools.build_meta"
 name = "anti-cheat-scanner"
 version = "0.2.0"
 description = "Windows utility for identifying anti-cheat software and related traces"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "psutil>=5.9.0,<7",
+  "psutil>=7.0,<8",
   "pywin32>=306,<400; sys_platform=='win32'",
 ]
 
 [project.scripts]
 anti-cheat-scanner = "main:main"
+
+[tool.setuptools]
+py-modules = ["main", "report"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+config = ["*.json", "*.md"]
 
 [tool.setuptools.packages.find]
 where = ["."]

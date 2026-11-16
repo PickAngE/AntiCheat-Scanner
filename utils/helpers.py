@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from ctypes import wintypes
 from functools import lru_cache
 from pathlib import Path
@@ -27,13 +28,15 @@ SIGNATURE_ERROR = "Error checking"
 SIGNATURE_UNSIGNED = "Unsigned/Self-signed"
 
 PS_CMD_TIMEOUT = 120
-BATCH_SIZE = 20
+BATCH_SIZE = 64
 _PS_MAX_SCRIPT_CHARS = 6000
-_PS_SEMAPHORE = threading.RLock()
+SIGNATURE_WORKERS = 4
+_PS_SLOTS = threading.BoundedSemaphore(SIGNATURE_WORKERS)
 
-ADMIN_WAIT_TIMEOUT_MS = 300000
+ADMIN_WAIT_INFINITE = 0xFFFFFFFF
 
 _HASH_BLOCK_SIZE = 65536
+_MAX_HASH_BYTES = 1024**3
 
 _FILE_PROPERTY_KEYS = (
     "CompanyName",
@@ -43,14 +46,6 @@ _FILE_PROPERTY_KEYS = (
     "InternalName",
     "OriginalFilename",
 )
-
-CSIDL_PROGRAM_FILES = 0x0026
-CSIDL_PROGRAM_FILESX86 = 0x002A
-CSIDL_APP_DATA = 0x001A
-CSIDL_LOCAL_APP_DATA = 0x001C
-CSIDL_COMMON_PROGRAMS = 0x0017
-CSIDL_SYSTEM = 0x0025
-CSIDL_WINDOWS = 0x0024
 
 
 class _ShellExecuteInfo(ctypes.Structure):
@@ -76,45 +71,6 @@ class _ShellExecuteInfo(ctypes.Structure):
 def _ps_quote(path: str) -> str:
     cleaned = path.replace("\r", "").replace("\n", "").replace("\x00", "")
     return "'" + cleaned.replace("'", "''") + "'"
-
-
-def _get_default_windows_folder(csidl: int) -> str:
-    defaults = {
-        CSIDL_PROGRAM_FILES: os.environ.get("PROGRAMFILES", r"C:\Program Files"),
-        CSIDL_PROGRAM_FILESX86: os.environ.get("PROGRAMFILES(X86)", r"C:\Program Files (x86)"),
-        CSIDL_APP_DATA: os.environ.get("APPDATA", r"C:\Users\Default\AppData\Roaming"),
-        CSIDL_LOCAL_APP_DATA: os.environ.get("LOCALAPPDATA", r"C:\Users\Default\AppData\Local"),
-        CSIDL_COMMON_PROGRAMS: r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs",
-        CSIDL_SYSTEM: os.environ.get("SYSTEMROOT", r"C:\Windows") + r"\System32",
-        CSIDL_WINDOWS: os.environ.get("SYSTEMROOT", r"C:\Windows"),
-    }
-    return defaults.get(csidl, r"C:\Windows")
-
-
-@lru_cache(maxsize=32)
-def get_windows_folder(csidl: int) -> str:
-    windll = getattr(ctypes, "windll", None)
-    if windll is None:
-        return _get_default_windows_folder(csidl)
-    try:
-        shell32 = windll.shell32
-        get_folder_path = shell32.SHGetFolderPathW
-        get_folder_path.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int,
-            ctypes.c_void_p,
-            ctypes.c_uint,
-            ctypes.c_wchar_p,
-        ]
-        path = ctypes.create_unicode_buffer(1024)
-        result = get_folder_path(None, csidl, None, 0, path)
-        if result != 0:
-            logger.debug("SHGetFolderPath failed for %s with code %s", csidl, result)
-            return _get_default_windows_folder(csidl)
-        return path.value
-    except (AttributeError, OSError, ValueError) as exc:
-        logger.debug("Unable to resolve Windows folder %s: %s", csidl, format_error(exc))
-        return _get_default_windows_folder(csidl)
 
 
 def _existing_drives() -> list[str]:
@@ -144,14 +100,18 @@ def get_drives() -> list[str]:
     return drives
 
 
-@lru_cache(maxsize=256)
+def _run_powershell(script: str) -> str:
+    with _PS_SLOTS:
+        return run_powershell(script, timeout=PS_CMD_TIMEOUT)
+
+
+@lru_cache(maxsize=2048)
 def get_digital_signature(file_path: str) -> str:
     if not os.path.exists(file_path):
         return ""
     script = f"(Get-AuthenticodeSignature -LiteralPath {_ps_quote(file_path)}).SignerCertificate.Subject"
     try:
-        with _PS_SEMAPHORE:
-            output = run_powershell(script, timeout=PS_CMD_TIMEOUT).strip()
+        output = _run_powershell(script).strip()
     except subprocess.TimeoutExpired:
         logger.warning("Signature timeout for %s", file_path)
         return SIGNATURE_TIMEOUT
@@ -187,7 +147,7 @@ def _batch_chunk(valid_paths: list[str]) -> dict[str, str]:
         merged.update(_batch_chunk(valid_paths[middle:]))
         return merged
     try:
-        output = run_powershell(_build_signature_script(valid_paths), timeout=PS_CMD_TIMEOUT)
+        output = _run_powershell(_build_signature_script(valid_paths))
     except (OSError, ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         logger.debug("Batch signature lookup failed: %s", format_error(exc))
         return {path: get_digital_signature(path) for path in valid_paths}
@@ -218,16 +178,26 @@ def batch_get_digital_signatures(file_paths: list[str]) -> dict[str, str]:
     valid_paths = [path for path in file_paths if os.path.exists(path)]
     if not valid_paths:
         return {}
+    chunks = list(_iter_batches(valid_paths))
+    if len(chunks) == 1:
+        return _batch_chunk(chunks[0])
     result: dict[str, str] = {}
-    with _PS_SEMAPHORE:
-        for chunk in _iter_batches(valid_paths):
-            result.update(_batch_chunk(chunk))
+    with ThreadPoolExecutor(max_workers=min(len(chunks), SIGNATURE_WORKERS)) as pool:
+        for chunk_result in pool.map(_batch_chunk, chunks):
+            result.update(chunk_result)
     return result
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=2048)
 def get_file_hash(file_path: str) -> str:
     if not os.path.exists(file_path):
+        return ""
+    try:
+        if os.path.getsize(file_path) > _MAX_HASH_BYTES:
+            logger.debug("Skipping hash for %s: file too large", file_path)
+            return ""
+    except OSError as exc:
+        logger.debug("Unable to size %s: %s", file_path, format_error(exc))
         return ""
     digest = hashlib.sha256()
     try:
@@ -240,7 +210,7 @@ def get_file_hash(file_path: str) -> str:
         return "N/A"
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=2048)
 def _cached_file_properties(file_path: str) -> dict[str, object]:
     properties: dict[str, object] = {key: "" for key in _FILE_PROPERTY_KEYS}
     if not os.path.exists(file_path):
@@ -289,12 +259,6 @@ def get_file_properties(file_path: str) -> dict[str, object]:
     return dict(_cached_file_properties(file_path))
 
 
-def _clear_caches() -> None:
-    get_digital_signature.cache_clear()
-    get_file_hash.cache_clear()
-    _cached_file_properties.cache_clear()
-
-
 def is_admin() -> bool:
     if os.name != "nt":
         return False
@@ -316,10 +280,6 @@ def request_admin_rerun() -> int | None:
             target = sys.executable
             parameters = subprocess.list2cmdline(sys.argv[1:])
             directory = str(Path(sys.executable).parent)
-        elif len(sys.argv) > 0 and sys.argv[0] == "-m":
-            target = sys.executable
-            parameters = subprocess.list2cmdline(["-u", "-m", *sys.argv[1:]])
-            directory = os.path.abspath(os.getcwd())
         else:
             script = os.path.abspath(sys.argv[0])
             parameters = subprocess.list2cmdline(["-u", script, *sys.argv[1:]])
@@ -353,12 +313,9 @@ def request_admin_rerun() -> int | None:
         close_handle = windll.kernel32.CloseHandle
         close_handle.argtypes = [wintypes.HANDLE]
         close_handle.restype = wintypes.BOOL
-        wait_result = wait_for_single_object(process_handle, ADMIN_WAIT_TIMEOUT_MS)
+        wait_result = wait_for_single_object(process_handle, ADMIN_WAIT_INFINITE)
         if wait_result != 0:
-
-
-
-            logger.debug("Timed out or failed waiting for the elevated process")
+            logger.debug("Waiting for the elevated process failed")
             close_handle(process_handle)
             return None
         exit_code = wintypes.DWORD()

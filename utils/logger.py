@@ -5,15 +5,12 @@ import logging
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import TextIO
 
 _REPORT_LOGGER = "acs.report"
 
 
 class ReportLogger:
     def __init__(self) -> None:
-        self.log_file: TextIO | None = None
-        self._report_path: Path | None = None
         self._lock = threading.RLock()
         self._logger = logging.getLogger(_REPORT_LOGGER)
         self._logger.setLevel(logging.INFO)
@@ -55,18 +52,12 @@ class ReportLogger:
                 raise OSError(f"Report path became a reparse point: {path}")
             self.close()
             resolved = path.resolve()
-            self._report_path = resolved
             file_handler = logging.FileHandler(path, encoding="utf-8")
             file_handler.setFormatter(logging.Formatter("%(message)s"))
             self._logger.addHandler(file_handler)
-            self.log_file = file_handler.stream
             self.log(datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S%z"))
             self.log("")
             return resolved
-
-    @property
-    def report_path(self) -> Path | None:
-        return self._report_path
 
     def log(self, text: str, indent: int = 0) -> None:
         with self._lock:
@@ -84,7 +75,6 @@ class ReportLogger:
                         handler.flush()
                     handler.close()
                     self._logger.removeHandler(handler)
-            self.log_file = None
 
 
 logger = ReportLogger()

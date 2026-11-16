@@ -39,8 +39,7 @@ class ServiceChecker(BaseChecker):
 
         self._target_exact = {
             base
-            for signature in self._all_signatures
-            for base in (signature.casefold().strip(),)
+            for base in (signature.casefold().strip() for signature in self._all_signatures)
             if len(base) >= 3
         }
 

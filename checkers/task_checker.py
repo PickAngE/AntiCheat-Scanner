@@ -151,11 +151,13 @@ class TaskChecker(BaseChecker):
                         self.fail_count += 1
                         logger.debug("TaskChecker could not read %s", item)
                         continue
-                    if not triggered and self._content_pattern.search(content):
+                    if not triggered:
                         match = self._content_pattern.search(content)
-                        token = match.group(0) if match else "?"
-                        self._append_task(f"TASK CONTENT MATCH: {item.name} (contains {token})")
-                        triggered = True
+                        if match:
+                            self._append_task(
+                                f"TASK CONTENT MATCH: {item.name} (contains {match.group(0)})"
+                            )
+                            triggered = True
                     for match in _WINDOWS_PATH_PATTERN.finditer(content):
                         raw_path = match.group(0).strip()
                         path = _resolve_task_path(raw_path)

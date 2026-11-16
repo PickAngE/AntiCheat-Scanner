@@ -37,7 +37,7 @@ class RegistryChecker(BaseChecker):
     ) -> None:
         super().__init__(ac_database, sig_index)
         self._all_targets_cache: dict[str, list[str]] = {}
-        self._uninstall_map: list[tuple[str, re.Pattern[str]]] | None = None
+        self._uninstall_map: list[re.Pattern[str]] | None = None
 
     def _add(self, entry: str) -> None:
         self.append_detection(Detection(category=CATEGORY_REG, text=entry))
@@ -60,9 +60,9 @@ class RegistryChecker(BaseChecker):
             self._all_targets_cache[sources] = list(dict.fromkeys(result))
         return self._all_targets_cache[sources]
 
-    def _get_uninstall_map(self) -> list[tuple[str, re.Pattern[str]]]:
+    def _get_uninstall_map(self) -> list[re.Pattern[str]]:
         if self._uninstall_map is None:
-            compiled: list[tuple[str, re.Pattern[str]]] = []
+            compiled: list[re.Pattern[str]] = []
             for ac in self.ac_database:
                 targets = [
                     re.escape(value.casefold())
@@ -70,9 +70,7 @@ class RegistryChecker(BaseChecker):
                     if len(value) >= 4
                 ]
                 if targets:
-                    compiled.append(
-                        (ac.name, re.compile(rf"\b({'|'.join(targets)})\b", re.IGNORECASE))
-                    )
+                    compiled.append(re.compile(rf"\b({'|'.join(targets)})\b", re.IGNORECASE))
             self._uninstall_map = compiled
         return self._uninstall_map
 
@@ -198,14 +196,11 @@ class RegistryChecker(BaseChecker):
 
     @staticmethod
     def _uninstall_matches(
-        display_name: str, extra: str, uninstall_map: list[tuple[str, re.Pattern[str]]]
+        display_name: str, extra: str, uninstall_map: list[re.Pattern[str]]
     ) -> bool:
-        for _ac_name, pattern in uninstall_map:
+        for pattern in uninstall_map:
             if pattern.search(display_name):
                 return True
-
-
-
             if extra and pattern.search(extra) and _INSTALLER_HINT.search(display_name):
                 return True
         return False
@@ -277,7 +272,7 @@ class RegistryChecker(BaseChecker):
                             except OSError as exc:
                                 self.fail_count += 1
                                 logger.debug("Startup value scan failed: %s", format_error(exc))
-                except (FileNotFoundError, OSError) as exc:
+                except OSError as exc:
                     logger.debug("Startup key scan failed: %s", format_error(exc))
 
     def _scan_muicache(self) -> None:
@@ -316,5 +311,5 @@ class RegistryChecker(BaseChecker):
                     except OSError as exc:
                         self.fail_count += 1
                         logger.debug("%s value scan failed: %s", label, format_error(exc))
-        except (FileNotFoundError, OSError) as exc:
+        except OSError as exc:
             logger.debug("%s key scan failed: %s", label, format_error(exc))
