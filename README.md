@@ -125,7 +125,7 @@ Available options:
 --strict            Return non-zero for a partial scan
 --verbose           Enable debug logging
 --no-elevate        Skip the admin-elevation check (CI / non-admin runs)
---no-whitelist      Bypass whitelist filtering (audit runs)
+--no-whitelist      Bypass whitelist filtering (audit runs) (false positive may occur)
 --version           Print the version and exit
 ```
 
